@@ -233,6 +233,10 @@ export default definePlugin({
         }
     },
 
+    get botClientVersion() {
+        return window.electron?.getBotClientVersion();
+    },
+
     get additionalInfo() {
         if (IS_DEV) return " (Dev)";
         if (IS_WEB) return " (Web)";
@@ -242,10 +246,11 @@ export default definePlugin({
     },
 
     getInfoRows() {
-        const { electronVersion, chromiumVersion, additionalInfo } = this;
+        const { electronVersion, chromiumVersion, additionalInfo, botClientVersion } = this;
 
         const rows = [`Vencord ${gitHash}${additionalInfo}`];
 
+        if (botClientVersion) rows.push(`BotClient ${botClientVersion}`);
         if (electronVersion) rows.push(`Electron ${electronVersion}`);
         if (chromiumVersion) rows.push(`Chromium ${chromiumVersion}`);
 

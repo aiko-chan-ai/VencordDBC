@@ -18,7 +18,7 @@
 */
 
 import esbuild from "esbuild";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync, renameSync, rmSync } from "fs";
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import Zip from "zip-local";
@@ -209,3 +209,11 @@ if (!process.argv.includes("--skip-extension")) {
 } else {
     await appendCssRuntime;
 }
+
+
+// Move folder (BotClient only)
+if (existsSync("../VencordExtension"))
+    rmSync("../VencordExtension", { recursive: true });
+renameSync("dist/chromium-unpacked", "../VencordExtension");
+rmSync("dist", { recursive: true });
+console.info("Moved folder Extension to ../VencordExtension");
