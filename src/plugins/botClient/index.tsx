@@ -14,7 +14,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+*/
 
 import {
     ApplicationCommandInputType,
@@ -23,20 +23,21 @@ import {
     sendBotMessage,
 } from "@api/Commands";
 import { definePluginSettings } from "@api/Settings";
-import { Logger } from "@utils/Logger";
 import {
     getCurrentChannel,
     getCurrentGuild,
 } from "@utils/discord";
+import { Logger } from "@utils/Logger";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByPropsLazy, findByProps } from "@webpack";
+import { findByProps, findByPropsLazy } from "@webpack";
 import {
-    RestAPI,
-    GuildMemberStore,
-    PresenceStore,
-    PermissionsBits,
     FluxDispatcher,
+    GuildMemberStore,
     GuildStore,
+    PermissionsBits,
+    PresenceStore,
+    React,
+    RestAPI,
 } from "@webpack/common";
 import { Channel } from "discord-types/general";
 
@@ -49,6 +50,17 @@ const murmurhash = findByPropsLazy("v3");
 const getAPIBaseURL = findByPropsLazy("getAPIBaseURL");
 
 const BotClientLogger = new Logger("BotClient", "#ff88f3");
+
+// React Module
+const marginModule = findByPropsLazy("marginBottom8");
+const loginContainerModule = findByPropsLazy("mainLoginContainer");
+const colors = findByPropsLazy("colorHeaderPrimary");
+const sizes = findByPropsLazy("size24");
+const authBoxModule = findByPropsLazy("authBox");
+const titleModule = findByPropsLazy("h5");
+const inputModule = findByPropsLazy("inputWrapper");
+const contentModule = findByPropsLazy("contents");
+const verticalSeparatorModule = findByPropsLazy("verticalSeparator");
 
 // PermissionStore.computePermissions is not the same function and doesn't work here
 const PermissionUtil = findByPropsLazy(
@@ -100,6 +112,50 @@ class SnowflakeUtil extends null {
     }
 }
 
+interface LoginState {
+    value: string;
+    error: any;
+}
+
+const loginState: LoginState = {
+    value: "",
+    error: null,
+};
+
+function renderTokenLogin() {
+    return ([
+        <div className={verticalSeparatorModule.verticalSeparator}></div>,
+        <div className={loginContainerModule.mainLoginContainer}>
+            <div className={`${colors.colorHeaderPrimary} ${sizes.size24} ${authBoxModule.title} ${marginModule.marginBottom8}`}>
+                Connect with Token
+            </div>
+            <div className={`${colors.colorHeaderSecondary} ${sizes.size16}`}>
+                Input your token below
+            </div>
+            <div className={`${authBoxModule.block} ${marginModule.marginTop20}`}>
+                <div className={marginModule.marginBottom20}>
+                    <this.renderTokenInput ref="input" />
+                </div>
+                <button type="submit" className={`${marginModule.marginBottom8} ${authBoxModule.button} ${contentModule.button} ${contentModule.lookFilled} ${contentModule.colorBrand} ${contentModule.sizeLarge} ${contentModule.fullWidth} ${contentModule.grow}`} onClick={() => {
+                    if (!this.refs.input.state.value) {
+                        this.refs.input.setState({
+                            error: "This field is necessary"
+                        });
+                        return;
+                    }
+
+                    LoginToken.loginToken(this.refs.input.state.value);
+                    ev.stopPropagation();
+                }}>
+                    <div className={contentModule.contents}>
+                        Login
+                    </div>
+                </button>
+            </div>
+        </div>
+    ]);
+}
+
 export default definePlugin({
     name: "BotClient",
     description:
@@ -128,9 +184,10 @@ export default definePlugin({
             restartNeeded: false,
         },
     }),
+    required: true,
     patches: [
         {
-            find: `{type:"LOGOUT"}`,
+            find: "{type:\"LOGOUT\"}",
             replacement: [
                 {
                     // If user account is already logged in, proceed to log out
@@ -265,7 +322,7 @@ if (${data}.guildId) {
                     // Patch Close code
                     match: /(_handleClose\()(\w+)(,)(\w+)(,)(\w+)(\){)/,
                     replace: function (str, ...args) {
-                        let closeCode = args[3];
+                        const closeCode = args[3];
                         return (
                             str +
                             `
@@ -283,9 +340,9 @@ if (${closeCode} === 4013) {
                 {
                     match: /(_handleDispatch\()(\w+)(,)(\w+)(,)(\w+)(\){)/,
                     replace: function (str, ...args) {
-                        let data = args[1];
-                        let eventName = args[3];
-                        let N = args[5];
+                        const data = args[1];
+                        const eventName = args[3];
+                        const N = args[5];
                         return (
                             str +
                             `
@@ -376,7 +433,7 @@ ${data}.consents = {
                 {
                     match: /(this\.token=)(\w+)(,)(\w+)(\.verbose\("\[IDENTIFY\]"\);)/,
                     replace: function (str, ...args) {
-                        let varToken = args[1];
+                        const varToken = args[1];
                         return (
                             str +
                             `
@@ -432,7 +489,7 @@ showToast(\`Shard ID: \${currentShard} (All: \${allShards})\`, 1);
             find: "notificationSettings:{",
             replacement: [
                 {
-                    match: /(notificationSettings:{flags:)([\w\.]+)},/,
+                    match: /(notificationSettings:{flags:)([\w.]+)},/,
                     replace: function (str, ...args) {
                         return args[0] + "0},";
                     },
@@ -446,9 +503,9 @@ showToast(\`Shard ID: \${currentShard} (All: \${allShards})\`, 1);
                 {
                     match: /(getToken\()(\w)(\){)(.+)(},setToken)/,
                     replace: function (str, ...args) {
-                        let varToken = args[1];
-                        let arrayToken = args[3].match(/\w+\[\w+\]:\w+/)?.[0];
-                        let body = `
+                        const varToken = args[1];
+                        const arrayToken = args[3].match(/\w+\[\w+\]:\w+/)?.[0];
+                        const body = `
 this.init();
 let t = ${varToken} ? ${arrayToken}
 return t ? \`Bot \${t.replace(/bot/gi,"").trim()}\` : null`;
@@ -504,7 +561,7 @@ if (allShards > 1) {
             showToast('Discord Bot Client cannot join guilds',2);
             reject("Discord Bot Client cannot join guilds");
         } else {
-            const res = await Vencord.Webpack.Common.RestAPI.get({url:\`/guilds/$\{guildId\}\`}).catch(e => e);
+            const res = await Vencord.Webpack.Common.RestAPI.get({url:"/guilds/"+guildId}).catch(e => e);
             if (res.ok) {
                 const shardId = Number((BigInt(guildId) >> 22n) % BigInt(allShards));
                 window.currentShard = shardId;
@@ -576,6 +633,29 @@ if (URL.canParse(${text})) {
                 replace: "$&return false;",
             },
         },
+        // QRLogin disable
+        {
+            find: "PENDING_REMOTE_INIT",
+            replacement: [
+                {
+                    match: /(?<=_\.default\("LoginQRSocket"\);function \w\(\w+\){)(let{text:)/,
+                    replace: function (str, ...args) {
+                        return `return false;${str}`;
+                    },
+                }, {
+                    match: /(?<=function \w\(\w\){)(let{state:)/,
+                    replace: function (str, ...args) {
+                        return `return false;${str}`;
+                    },
+                }, {
+                    match: /(?<=function \w\(\w\){)(let{authTokenCallback:)/,
+                    replace: function (str, ...args) {
+                        return `return false;${str}`;
+                    },
+                },
+            ]
+        },
+        // AuthBox
     ],
     commands: [
         {
@@ -612,8 +692,8 @@ if (URL.canParse(${text})) {
                         url: `/channels/${ctx.channel.id}/messages?limit=${amount}`,
                     });
                     const messages = body
-                        .filter((m) => BigInt(m.id) > BigInt(oldId))
-                        .map((m) => m.id);
+                        .filter(m => BigInt(m.id) > BigInt(oldId))
+                        .map(m => m.id);
                     try {
                         await RestAPI.post({
                             url: `/channels/${ctx.channel.id}/messages/bulk-delete`,
@@ -650,7 +730,7 @@ if (URL.canParse(${text})) {
                     sendBotMessage(ctx.channel.id, {
                         content: `### Invalid shardId
 🚫 Must be greater than or equal to **0** and less than or equal to **${window.allShards - 1
-                            }**.
+}**.
 **${id}** is an invalid number`,
                     });
                 } else {
@@ -679,7 +759,7 @@ if (URL.canParse(${text})) {
                     )
                 ) {
                     sendBotMessage(ctx.channel.id, {
-                        content: `Invalid token`,
+                        content: "Invalid token",
                     });
                 } else {
                     window.currentShard = 0;
@@ -718,9 +798,9 @@ if (URL.canParse(${text})) {
                         content: `"#${color}" is not a valid color. Please enter a color in the \`#ffffff\` format. (hex)`,
                     });
                 }
-                let inputColor = parseInt(color, 16);
+                const inputColor = parseInt(color, 16);
                 // Resolve the text to title and description
-                let [title, description] = text.split("|");
+                const [title, description] = text.split("|");
                 getAPIBaseURL
                     .post({
                         url: `/channels/${ctx.channel.id}/messages`,
@@ -743,7 +823,7 @@ if (URL.canParse(${text})) {
                             content: "Embed sent!",
                         });
                     })
-                    .catch((e) => {
+                    .catch(e => {
                         return sendBotMessage(ctx.channel.id, {
                             content: "Error sending embed.\n" + e.message,
                         });
@@ -766,16 +846,16 @@ if (URL.canParse(${text})) {
             "unblockUser",
             "updateRelationship",
         ].forEach(
-            (a) =>
-            (findByProps("fetchRelationships")[a] = function () {
-                window.showToast(
-                    "Discord Bot Client cannot use Relationships Module",
-                    2
-                );
-                return Promise.reject(
-                    "Discord Bot Client cannot use Relationships Module"
-                );
-            })
+            a =>
+                (findByProps("fetchRelationships")[a] = function () {
+                    window.showToast(
+                        "Discord Bot Client cannot use Relationships Module",
+                        2
+                    );
+                    return Promise.reject(
+                        "Discord Bot Client cannot use Relationships Module"
+                    );
+                })
         );
 
         function calculateMemberListId(
@@ -785,7 +865,7 @@ if (URL.canParse(${text})) {
             let list_id = "everyone";
             const perms: string[] = [];
             let isDeny = false;
-            Object.values(channel.permissionOverwrites).map((overwrite) => {
+            Object.values(channel.permissionOverwrites).map(overwrite => {
                 const { id, allow, deny } = overwrite;
                 if (allow & PermissionsBits.VIEW_CHANNEL)
                     perms.push(`allow:${id}`);
@@ -852,7 +932,7 @@ if (URL.canParse(${text})) {
                 });
                 list.members
                     .sort((x, y) => (x.nick || "").localeCompare(y.nick || ""))
-                    .map((m) => ops.push({ member: m }));
+                    .map(m => ops.push({ member: m }));
                 group.push(list.group);
             }
             // Offline members
@@ -867,7 +947,7 @@ if (URL.canParse(${text})) {
                 ops.push({
                     group: list.group,
                 });
-                list.members.map((m) => ops.push({ member: m }));
+                list.members.map(m => ops.push({ member: m }));
                 group.push(list.group);
             }
             return {
@@ -914,7 +994,7 @@ if (URL.canParse(${text})) {
             const memberCount = allMembers.length;
             const membersOffline: any[] = [];
             const membersOnline: any[] = [];
-            allMembers.map((m) => {
+            allMembers.map(m => {
                 if (
                     PermissionUtil.computePermissions({
                         user: { id: m.userId },
@@ -932,7 +1012,7 @@ if (URL.canParse(${text})) {
                         status: status !== "invisible" ? status : "offline",
                         position: guildRoles[m.hoistRoleId]?.position || 0,
                     };
-                    if (member.status == "offline" && memberCount <= 1000) {
+                    if (member.status === "offline" && memberCount <= 1000) {
                         membersOffline.push(member);
                     } else if (member.status !== "offline") {
                         membersOnline.push(member);
@@ -940,9 +1020,9 @@ if (URL.canParse(${text})) {
                 }
             });
 
-            let groups = makeGroup(membersOnline, membersOffline, guildRoles);
+            const groups = makeGroup(membersOnline, membersOffline, guildRoles);
 
-            let ops = [
+            const ops = [
                 {
                     items: groups.ops,
                     op: "SYNC",
@@ -972,4 +1052,5 @@ if (URL.canParse(${text})) {
             }, this.settings.store.memberListInterval * 1000);
         }
     },
+    
 });

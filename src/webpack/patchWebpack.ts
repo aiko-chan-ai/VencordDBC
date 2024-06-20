@@ -64,7 +64,7 @@ Object.defineProperty(Function.prototype, "O", {
         // This ensures we actually got the right one
         // this.e (wreq.e) is the method for loading a chunk, and only the main webpack has it
         const { stack } = new Error();
-        if ((stack?.includes("discord.com") || stack?.includes("discordapp.com")) && String(this.e).includes("Promise.all")) {
+        if ((stack?.includes("discord.com") || stack?.includes("discordapp.com") || stack?.includes("localhost")) && String(this.e).includes("Promise.all")) {
             logger.info("Found main WebpackRequire.onChunksLoaded");
 
             delete (Function.prototype as any).O;
@@ -132,7 +132,7 @@ Object.defineProperty(Function.prototype, "m", {
         // When using react devtools or other extensions, we may also catch their webpack here.
         // This ensures we actually got the right one
         const { stack } = new Error();
-        if ((stack?.includes("discord.com") || stack?.includes("discordapp.com")) && !Array.isArray(v)) {
+        if ((stack?.includes("discord.com") || stack?.includes("discordapp.com") || stack?.includes("localhost")) && !Array.isArray(v)) {
             logger.info("Found Webpack module factory", stack.match(/\/assets\/(.+?\.js)/)?.[1] ?? "");
             patchFactories(v);
         }
@@ -209,14 +209,33 @@ function patchFactories(factories: Record<string, (module: any, exports: any, re
 
             // There are (at the time of writing) 11 modules exporting the window
             // Make these non enumerable to improve webpack search performance
-            if (require.c && (exports === window || exports?.default === window)) {
-                Object.defineProperty(require.c, id, {
-                    value: require.c[id],
-                    enumerable: false,
-                    configurable: true,
-                    writable: true
-                });
-                return;
+            if (require.c) {
+                let foundWindow = false;
+
+                if (exports === window) {
+                    foundWindow = true;
+                } else if (typeof exports === "object") {
+                    if (exports?.default === window) {
+                        foundWindow = true;
+                    } else {
+                        for (const nested in exports) if (nested.length <= 3) {
+                            if (exports[nested] === window) {
+                                foundWindow = true;
+                            }
+                        }
+                    }
+                }
+
+                if (foundWindow) {
+                    Object.defineProperty(require.c, id, {
+                        value: require.c[id],
+                        enumerable: false,
+                        configurable: true,
+                        writable: true
+                    });
+
+                    return;
+                }
             }
 
             for (const callback of moduleListeners) {
@@ -232,9 +251,18 @@ function patchFactories(factories: Record<string, (module: any, exports: any, re
                     if (exports && filter(exports)) {
                         subscriptions.delete(filter);
                         callback(exports, id);
-                    } else if (exports.default && filter(exports.default)) {
-                        subscriptions.delete(filter);
-                        callback(exports.default, id);
+                    } else if (typeof exports === "object") {
+                        if (exports.default && filter(exports.default)) {
+                            subscriptions.delete(filter);
+                            callback(exports.default, id);
+                        } else {
+                            for (const nested in exports) if (nested.length <= 3) {
+                                if (exports[nested] && filter(exports[nested])) {
+                                    subscriptions.delete(filter);
+                                    callback(exports[nested], id);
+                                }
+                            }
+                        }
                     }
                 } catch (err) {
                     logger.error("Error while firing callback for Webpack subscription:\n", err, filter, callback);
