@@ -38,6 +38,7 @@ import {
     PresenceStore,
     React,
     RestAPI,
+    useState,
 } from "@webpack/common";
 import { Channel } from "discord-types/general";
 
@@ -112,66 +113,65 @@ class SnowflakeUtil extends null {
     }
 }
 
-interface LoginState {
-    value: string;
-    error: any;
-}
-
-const loginState: LoginState = {
-    value: "",
-    error: null,
-};
-
-function renderTokenLogin() {
-    return ([
-        <div className={verticalSeparatorModule.verticalSeparator}></div>,
-        <div className={loginContainerModule.mainLoginContainer}>
-            <div className={`${colors.colorHeaderPrimary} ${sizes.size24} ${authBoxModule.title} ${marginModule.marginBottom8}`}>
-                Connect with Token
-            </div>
-            <div className={`${colors.colorHeaderSecondary} ${sizes.size16}`}>
-                Input your token below
-            </div>
-            <div className={`${authBoxModule.block} ${marginModule.marginTop20}`}>
-                <div className={marginModule.marginBottom20}>
-                    <renderTokenInput ref="input" />
+function RenderTokenLogin() {
+    const [state, setState] = useState<string>("loginToken");
+    const [error, setError] = useState<string>("loginTokenError");
+    return (
+        <>
+            <div className={verticalSeparatorModule.verticalSeparator}></div>
+            <div className={loginContainerModule.mainLoginContainer}>
+                <div className={`${colors.colorHeaderPrimary} ${sizes.size24} ${authBoxModule.title} ${marginModule.marginBottom8}`}>
+                    Connect with Token
                 </div>
-                <button type="submit" className={`${marginModule.marginBottom8} ${authBoxModule.button} ${contentModule.button} ${contentModule.lookFilled} ${contentModule.colorBrand} ${contentModule.sizeLarge} ${contentModule.fullWidth} ${contentModule.grow}`} onClick={() => {
-                    if (!this.refs.input.state.value) {
-                        this.refs.input.setState({
-                            error: "This field is necessary"
-                        });
-                        return;
-                    }
-
-                    LoginToken.loginToken(this.refs.input.state.value);
-                    ev.stopPropagation();
-                }}>
-                    <div className={contentModule.contents}>
-                        Login
+                <div className={`${colors.colorHeaderSecondary} ${sizes.size16}`}>
+                    Input your token below
+                </div>
+                <div className={`${authBoxModule.block} ${marginModule.marginTop20}`}>
+                    <div className={marginModule.marginBottom20}>
+                        <h5 className={`${colors.colorStandard} ${sizes.size14} ${titleModule.h5} ${titleModule.defaultMarginh5}${error ? " " + titleModule.error : ""}`}>
+                            Token
+                            {error ? <span className={titleModule.errorMessage}>
+                                <span className={titleModule.errorSeparator}>-</span>{error}
+                            </span> : null}
+                        </h5>
+                        <div className={inputModule.inputWrapper}>
+                            <input
+                                className={`${inputModule.inputDefault}${error ? " " + inputModule.inputError : ""}`}
+                                name="token"
+                                type="text"
+                                placeholder="Enter your token"
+                                aria-label="Token"
+                                autoComplete="off"
+                                maxLength={999}
+                                spellCheck="false"
+                                value={state}
+                                onChange={ev => {
+                                    setState(ev.target.value);
+                                }}
+                            />
+                        </div>
                     </div>
-                </button>
-            </div>
-        </div>
-    ]);
-}
+                    <button
+                        type="submit"
+                        className={`${marginModule.marginBottom8} ${authBoxModule.button} ${contentModule.button} ${contentModule.lookFilled} ${contentModule.colorBrand} ${contentModule.sizeLarge} ${contentModule.fullWidth} ${contentModule.grow}`}
+                        onClick={ev => {
+                            if (!state) {
+                                setError("Invalid token");
+                                return;
+                            }
 
-export function renderTokenInput() {
-    return [
-        <h5 className={`${colors.colorStandard} ${sizes.size14} ${titleModule.h5} ${titleModule.defaultMarginh5}${this.state.error ? " " + titleModule.error : ""}`}>
-            Token
-            {this.state.error ? <span className={titleModule.errorMessage}>
-                <span className={titleModule.errorSeparator}>-</span>{this.state.error}
-            </span> : null}
-        </h5>,
-        <div className={inputModule.inputWrapper}>
-            <input className={`${inputModule.inputDefault}${this.state.error ? " " + inputModule.inputError : ""}`} name="token" type="token" placeholder aria-label="Token" autoComplete="off" maxLength={999} spellCheck="false" value={this.state.value} onChange={(ev) => {
-                this.setState({
-                    value: ev.target.value
-                });
-            }} />
-        </div>
-    ];
+                            LoginToken.loginToken(state);
+                            ev.stopPropagation();
+                        }}
+                    >
+                        <div className={contentModule.contents}>
+                            Login
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </>
+    );
 }
 
 export default definePlugin({
@@ -674,6 +674,15 @@ if (URL.canParse(${text})) {
             ]
         },
         // AuthBox
+        {
+            find: "Messages.AUTH_LOGIN_BODY",
+            replacement: {
+                match: /(?<=renderDefaultForm\(e\)\{.+\.marginTop20,)(children:\[)/,
+                replace: function (str, ...args) {
+                    return "children:[$self.renderTokenLogin()],children_:[";
+                },
+            }
+        }
     ],
     commands: [
         {
@@ -1070,5 +1079,10 @@ if (URL.canParse(${text})) {
             }, this.settings.store.memberListInterval * 1000);
         }
     },
-    
+    renderTokenLogin() {
+        return (
+            <RenderTokenLogin>
+            </RenderTokenLogin>
+        );
+    }
 });
