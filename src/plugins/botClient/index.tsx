@@ -54,14 +54,12 @@ const BotClientLogger = new Logger("BotClient", "#ff88f3");
 
 // React Module
 const marginModule = findByPropsLazy("marginBottom8");
-const loginContainerModule = findByPropsLazy("mainLoginContainer");
 const colors = findByPropsLazy("colorHeaderPrimary");
 const sizes = findByPropsLazy("size24");
 const authBoxModule = findByPropsLazy("authBox");
 const titleModule = findByPropsLazy("h5");
 const inputModule = findByPropsLazy("inputWrapper");
 const contentModule = findByPropsLazy("contents");
-const verticalSeparatorModule = findByPropsLazy("verticalSeparator");
 
 // PermissionStore.computePermissions is not the same function and doesn't work here
 const PermissionUtil = findByPropsLazy(
@@ -114,61 +112,51 @@ class SnowflakeUtil extends null {
 }
 
 function RenderTokenLogin() {
-    const [state, setState] = useState<string>("loginToken");
-    const [error, setError] = useState<string>("loginTokenError");
+    const [state, setState] = useState<string>();
+    const [error, setError] = useState<string>();
     return (
         <>
-            <div className={verticalSeparatorModule.verticalSeparator}></div>
-            <div className={loginContainerModule.mainLoginContainer}>
-                <div className={`${colors.colorHeaderPrimary} ${sizes.size24} ${authBoxModule.title} ${marginModule.marginBottom8}`}>
-                    Connect with Token
-                </div>
-                <div className={`${colors.colorHeaderSecondary} ${sizes.size16}`}>
-                    Input your token below
-                </div>
-                <div className={`${authBoxModule.block} ${marginModule.marginTop20}`}>
-                    <div className={marginModule.marginBottom20}>
-                        <h5 className={`${colors.colorStandard} ${sizes.size14} ${titleModule.h5} ${titleModule.defaultMarginh5}${error ? " " + titleModule.error : ""}`}>
-                            Token
-                            {error ? <span className={titleModule.errorMessage}>
-                                <span className={titleModule.errorSeparator}>-</span>{error}
-                            </span> : null}
-                        </h5>
-                        <div className={inputModule.inputWrapper}>
-                            <input
-                                className={`${inputModule.inputDefault}${error ? " " + inputModule.inputError : ""}`}
-                                name="token"
-                                type="text"
-                                placeholder="Enter your token"
-                                aria-label="Token"
-                                autoComplete="off"
-                                maxLength={999}
-                                spellCheck="false"
-                                value={state}
-                                onChange={ev => {
-                                    setState(ev.target.value);
-                                }}
-                            />
-                        </div>
+            <div className={`${authBoxModule.block} ${marginModule.marginTop20}`}>
+                <div className={marginModule.marginBottom20}>
+                    <h5 className={`${colors.colorStandard} ${sizes.size14} ${titleModule.h5} ${titleModule.defaultMarginh5}${error ? " " + titleModule.error : ""}`}>
+                        Bot Token
+                        {error ? <span className={titleModule.errorMessage}>
+                            <span className={titleModule.errorSeparator}>-</span>{error}
+                        </span> : null}
+                    </h5>
+                    <div className={inputModule.inputWrapper}>
+                        <input
+                            className={`${inputModule.inputDefault}${error ? " " + inputModule.inputError : ""}`}
+                            name="token"
+                            type="password"
+                            placeholder="Enter your bot token"
+                            aria-label="Token"
+                            autoComplete="off"
+                            maxLength={100}
+                            spellCheck="false"
+                            value={state}
+                            onChange={ev => {
+                                setState(ev.target.value);
+                            }}
+                        />
                     </div>
-                    <button
-                        type="submit"
-                        className={`${marginModule.marginBottom8} ${authBoxModule.button} ${contentModule.button} ${contentModule.lookFilled} ${contentModule.colorBrand} ${contentModule.sizeLarge} ${contentModule.fullWidth} ${contentModule.grow}`}
-                        onClick={ev => {
-                            if (!state) {
-                                setError("Invalid token");
-                                return;
-                            }
-
-                            LoginToken.loginToken(state);
-                            ev.stopPropagation();
-                        }}
-                    >
-                        <div className={contentModule.contents}>
-                            Login
-                        </div>
-                    </button>
                 </div>
+                <button
+                    type="submit"
+                    className={`${marginModule.marginBottom8} ${authBoxModule.button} ${contentModule.button} ${contentModule.lookFilled} ${contentModule.colorBrand} ${contentModule.sizeLarge} ${contentModule.fullWidth} ${contentModule.grow}`}
+                    onClick={ev => {
+                        ev.preventDefault();
+                        if (!/(mfa\.[a-z0-9_-]{20,})|([a-z0-9_-]{23,28}\.[a-z0-9_-]{6,7}\.[a-z0-9_-]{27})/i.test((state || "").trim())) {
+                            setError("Invalid token");
+                            return;
+                        }
+                        LoginToken.loginToken(state);
+                    }}
+                >
+                    <div className={contentModule.contents}>
+                        Login
+                    </div>
+                </button>
             </div>
         </>
     );
