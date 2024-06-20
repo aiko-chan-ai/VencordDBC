@@ -134,7 +134,7 @@ function renderTokenLogin() {
             </div>
             <div className={`${authBoxModule.block} ${marginModule.marginTop20}`}>
                 <div className={marginModule.marginBottom20}>
-                    <this.renderTokenInput ref="input" />
+                    <renderTokenInput ref="input" />
                 </div>
                 <button type="submit" className={`${marginModule.marginBottom8} ${authBoxModule.button} ${contentModule.button} ${contentModule.lookFilled} ${contentModule.colorBrand} ${contentModule.sizeLarge} ${contentModule.fullWidth} ${contentModule.grow}`} onClick={() => {
                     if (!this.refs.input.state.value) {
@@ -154,6 +154,24 @@ function renderTokenLogin() {
             </div>
         </div>
     ]);
+}
+
+export function renderTokenInput() {
+    return [
+        <h5 className={`${colors.colorStandard} ${sizes.size14} ${titleModule.h5} ${titleModule.defaultMarginh5}${this.state.error ? " " + titleModule.error : ""}`}>
+            Token
+            {this.state.error ? <span className={titleModule.errorMessage}>
+                <span className={titleModule.errorSeparator}>-</span>{this.state.error}
+            </span> : null}
+        </h5>,
+        <div className={inputModule.inputWrapper}>
+            <input className={`${inputModule.inputDefault}${this.state.error ? " " + inputModule.inputError : ""}`} name="token" type="token" placeholder aria-label="Token" autoComplete="off" maxLength={999} spellCheck="false" value={this.state.value} onChange={(ev) => {
+                this.setState({
+                    value: ev.target.value
+                });
+            }} />
+        </div>
+    ];
 }
 
 export default definePlugin({
