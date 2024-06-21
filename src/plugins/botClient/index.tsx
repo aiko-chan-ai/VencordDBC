@@ -150,6 +150,7 @@ function RenderTokenLogin() {
                             setError("Invalid token");
                             return;
                         }
+                        window.currentShard = 0;
                         LoginToken.loginToken(state);
                     }}
                 >
@@ -806,34 +807,6 @@ if (URL.canParse(${text})) {
             },
         },
         {
-            name: "switchtoken",
-            description: "Login with another bot",
-            inputType: ApplicationCommandInputType.BOT,
-            options: [
-                {
-                    name: "token",
-                    description: "Bot token",
-                    required: true,
-                    type: ApplicationCommandOptionType.STRING,
-                },
-            ],
-            execute: async (opts, ctx) => {
-                const token = findOption<string>(opts, "token", "");
-                if (
-                    !/(mfa\.[a-z0-9_-]{20,})|([a-z0-9_-]{23,28}\.[a-z0-9_-]{6,7}\.[a-z0-9_-]{27})/i.test(
-                        token
-                    )
-                ) {
-                    sendBotMessage(ctx.channel.id, {
-                        content: "Invalid token",
-                    });
-                } else {
-                    window.currentShard = 0;
-                    LoginToken.loginToken(token);
-                }
-            },
-        },
-        {
             name: "embed",
             description:
                 "Creates an embed with the specified color in the specified channel",
@@ -1138,6 +1111,7 @@ if (URL.canParse(${text})) {
             window.showToast("Login Failure: Invalid token", 2);
             return;
         } else {
+            window.currentShard = 0;
             LoginToken.loginToken(state);
         }
     }
