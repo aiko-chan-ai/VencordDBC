@@ -162,6 +162,37 @@ function RenderTokenLogin() {
     );
 }
 
+function RenderTokenLoginMultiAccount() {
+    const [state, setState] = useState<string>();
+    return (
+        <>
+            <div className={`${authBoxModule.block} ${marginModule.marginTop20}`}>
+                <div className={marginModule.marginBottom20}>
+                    <h5 className={`${colors.colorStandard} ${sizes.size14} ${titleModule.h5} ${titleModule.defaultMarginh5} token_multi`}>
+                        Bot Token
+                    </h5>
+                    <div className={inputModule.inputWrapper}>
+                        <input
+                            className={`${inputModule.inputDefault} token_multi`}
+                            name="token"
+                            type="password"
+                            placeholder="Enter your bot token"
+                            aria-label="Token"
+                            autoComplete="off"
+                            maxLength={100}
+                            spellCheck="false"
+                            value={state}
+                            onChange={ev => {
+                                setState(ev.target.value);
+                            }}
+                        />
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+}
+
 export default definePlugin({
     name: "BotClient",
     description:
@@ -255,6 +286,7 @@ return;
                     match: /callConnect\(((\w+,?)+)?\){/,
                     replace: "$& return;",
                 },
+                /* Looks like discord deleted it, but I'll keep it
                 {
                     match: /lobbyConnect\(((\w+,?)+)?\){/,
                     replace: "$& return;",
@@ -267,6 +299,7 @@ return;
                     match: /lobbyVoiceStatesUpdate\(((\w+,?)+)?\){/,
                     replace: "$& return;",
                 },
+                */
                 {
                     match: /streamCreate\(((\w+,?)+)?\){/,
                     replace: "$& return;",
@@ -427,7 +460,7 @@ ${data}.auth = {
 }
 ${data}.consents = {
 	personalization: {
-		consented: true,
+		consented: false,
 	},
 };
 }
@@ -670,6 +703,24 @@ if (URL.canParse(${text})) {
                     return "children:[$self.renderTokenLogin()],children_:[";
                 },
             }
+        },
+        // AuthBox2
+        {
+            find: "Messages.MULTI_ACCOUNT_LOGIN_TITLE",
+            replacement: [
+                {
+                    match: /(?<=renderDefaultForm\(\)\{.+\.loginForm,)(children:\[)/,
+                    replace: function (str, ...args) {
+                        return "children:[$self.renderTokenLoginMultiAccount()],children_:[";
+                    },
+                },
+                {
+                    match: /(?<=renderDefault\(\)\{.+\.Button\.Colors\.BRAND,)(onClick:)/,
+                    replace: function (str, ...args) {
+                        return "onClick:$self.validateTokenAndLogin,onClick_:";
+                    },
+                }
+            ]
         }
     ],
     commands: [
@@ -1072,5 +1123,22 @@ if (URL.canParse(${text})) {
             <RenderTokenLogin>
             </RenderTokenLogin>
         );
+    },
+    renderTokenLoginMultiAccount() {
+        return (
+            <RenderTokenLoginMultiAccount>
+            </RenderTokenLoginMultiAccount>
+        );
+    },
+    validateTokenAndLogin(e) {
+        e.preventDefault();
+        const state = (window.document.getElementsByClassName(`${inputModule.inputDefault} token_multi`)[0] as any)?.value;
+        if (!state) return;
+        if (!/(mfa\.[a-z0-9_-]{20,})|([a-z0-9_-]{23,28}\.[a-z0-9_-]{6,7}\.[a-z0-9_-]{27})/i.test((state || "").trim())) {
+            window.showToast("Login Failure: Invalid token", 2);
+            return;
+        } else {
+            LoginToken.loginToken(state);
+        }
     }
 });
