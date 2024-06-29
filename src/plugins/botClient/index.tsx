@@ -48,7 +48,6 @@ let INCREMENT = BigInt(0);
 const GetToken = findByPropsLazy("getToken");
 const LoginToken = findByPropsLazy("loginToken");
 const murmurhash = findByPropsLazy("v3");
-const getAPIBaseURL = findByPropsLazy("getAPIBaseURL");
 
 const BotClientLogger = new Logger("BotClient", "#ff88f3");
 
@@ -840,23 +839,22 @@ if (URL.canParse(${text})) {
                 const inputColor = parseInt(color, 16);
                 // Resolve the text to title and description
                 const [title, description] = text.split("|");
-                getAPIBaseURL
-                    .post({
-                        url: `/channels/${ctx.channel.id}/messages`,
-                        body: {
-                            embeds: [
-                                {
-                                    title,
-                                    description:
+                RestAPI.post({
+                    url: `/channels/${ctx.channel.id}/messages`,
+                    body: {
+                        embeds: [
+                            {
+                                title,
+                                description:
                                         description &&
                                             description.trim().length > 0
                                             ? description
                                             : undefined,
-                                    color: inputColor,
-                                },
-                            ],
-                        },
-                    })
+                                color: inputColor,
+                            },
+                        ],
+                    },
+                })
                     .then(() => {
                         return sendBotMessage(ctx.channel.id, {
                             content: "Embed sent!",
