@@ -16,21 +16,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { addChatBarButton, ChatBarButton } from "@api/ChatButtons";
 import {
     ApplicationCommandInputType,
     ApplicationCommandOptionType,
     findOption,
     sendBotMessage,
 } from "@api/Commands";
+import { addButton } from "@api/MessagePopover";
 import { definePluginSettings } from "@api/Settings";
 import {
     getCurrentChannel,
     getCurrentGuild,
 } from "@utils/discord";
 import { Logger } from "@utils/Logger";
+import { openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
 import { findByProps, findByPropsLazy } from "@webpack";
 import {
+    ChannelStore,
     FluxDispatcher,
     GuildMemberStore,
     GuildStore,
@@ -38,9 +42,15 @@ import {
     PresenceStore,
     React,
     RestAPI,
+    SelectedChannelStore,
+    showToast,
+    UserStore,
     useState,
 } from "@webpack/common";
 import { Channel } from "discord-types/general";
+
+import EmbedEditorModal from "./components/EmbedEditor";
+import { iconSvg } from "./icon.svg";
 
 const EPOCH = 1_420_070_400_000;
 let INCREMENT = BigInt(0);
@@ -109,6 +119,34 @@ class SnowflakeUtil extends null {
         return EPOCH;
     }
 }
+
+const IconChatButton: ChatBarButton = () => {
+    return (
+        <ChatBarButton onClick={() => openModal(props => <EmbedEditorModal modalProps={props} callbackSendEmbed={function (data) {
+            const channelId = SelectedChannelStore.getChannelId();
+            RestAPI.post({
+                url: `/channels/${channelId}/messages`,
+                body: {
+                    embeds: [
+                        data,
+                    ],
+                },
+            })
+                .then(() => {
+                    return sendBotMessage(channelId, {
+                        content: "Embed sent!",
+                    });
+                })
+                .catch(e => {
+                    return sendBotMessage(channelId, {
+                        content: "Error sending embed.\n" + e.message,
+                    });
+                });
+        }} />)} tooltip="Embed Editor">
+            {iconSvg()}
+        </ChatBarButton>
+    );
+};
 
 function RenderTokenLogin() {
     const [state, setState] = useState<string>();
@@ -805,68 +843,6 @@ if (URL.canParse(${text})) {
                 }
             },
         },
-        {
-            name: "embed",
-            description:
-                "Creates an embed with the specified color in the specified channel",
-            inputType: ApplicationCommandInputType.BOT,
-            options: [
-                {
-                    type: ApplicationCommandOptionType.STRING,
-                    name: "text",
-                    description:
-                        "Input text (separate the title from the description with |)",
-                    required: true,
-                },
-                {
-                    type: ApplicationCommandOptionType.STRING,
-                    name: "color",
-                    description: "Input color in hex format. Example: #fedbca",
-                    required: false,
-                },
-            ],
-            execute: async (opts, ctx) => {
-                let color = findOption<string>(opts, "color", "#000000");
-                const text = findOption<string>(opts, "text", "");
-                if (color.startsWith("#")) {
-                    color = color.slice(1);
-                }
-                if (color.length > 6 || Number.isNaN(parseInt(color, 16))) {
-                    return sendBotMessage(ctx.channel.id, {
-                        content: `"#${color}" is not a valid color. Please enter a color in the \`#ffffff\` format. (hex)`,
-                    });
-                }
-                const inputColor = parseInt(color, 16);
-                // Resolve the text to title and description
-                const [title, description] = text.split("|");
-                RestAPI.post({
-                    url: `/channels/${ctx.channel.id}/messages`,
-                    body: {
-                        embeds: [
-                            {
-                                title,
-                                description:
-                                        description &&
-                                            description.trim().length > 0
-                                            ? description
-                                            : undefined,
-                                color: inputColor,
-                            },
-                        ],
-                    },
-                })
-                    .then(() => {
-                        return sendBotMessage(ctx.channel.id, {
-                            content: "Embed sent!",
-                        });
-                    })
-                    .catch(e => {
-                        return sendBotMessage(ctx.channel.id, {
-                            content: "Error sending embed.\n" + e.message,
-                        });
-                    });
-            },
-        },
     ],
     start() {
         // Patch modules
@@ -894,6 +870,48 @@ if (URL.canParse(${text})) {
                     );
                 })
         );
+
+        addChatBarButton("EmbedButton", IconChatButton);
+
+        addButton("EmbedEditor", msg => {
+            const handler = async () => {
+                if (msg.author.id !== UserStore.getCurrentUser().id) {
+                    return showToast("This is not your message", 2);
+                }
+                if (msg.embeds.filter(e => e.type === "rich").length === 0) {
+                    return showToast("There is no valid embed in the message", 2);
+                }
+                showToast("Fetching message...", 1);
+                // Fetch raw msg from discord
+                const msgRaw = await RestAPI.get({
+                    url: `/channels/${msg.channel_id}/messages/${msg.id}`,
+                });
+                openModal(props => <EmbedEditorModal modalProps={props} callbackSendEmbed={function (data, msgData) {
+                    RestAPI.patch({
+                        url: `/channels/${msg.channel_id}/messages/${msg.id}`,
+                        body: msgData,
+                    })
+                        .then(() => {
+                            return sendBotMessage(msg.channel_id, {
+                                content: "Embed edited!",
+                            });
+                        })
+                        .catch(e => {
+                            return sendBotMessage(msg.channel_id, {
+                                content: "Error editing embed.\n" + e.message,
+                            });
+                        });
+                }} messageRaw={msgRaw.body} />);
+            };
+            return {
+                label: "Embed Editor",
+                icon: iconSvg,
+                message: msg,
+                channel: ChannelStore.getChannel(msg.channel_id),
+                onClick: handler,
+                onContextMenu: handler,
+            };
+        });
 
         function calculateMemberListId(
             channel: Channel,
