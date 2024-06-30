@@ -122,7 +122,7 @@ class SnowflakeUtil extends null {
 
 const IconChatButton: ChatBarButton = () => {
     return (
-        <ChatBarButton onClick={() => openModal(props => <EmbedEditorModal modalProps={props} callbackSendEmbed={function (data) {
+        <ChatBarButton onClick={() => openModal(props => <EmbedEditorModal modalProps={props} callbackSendEmbed={function (data, msg) {
             const channelId = SelectedChannelStore.getChannelId();
             RestAPI.post({
                 url: `/channels/${channelId}/messages`,
