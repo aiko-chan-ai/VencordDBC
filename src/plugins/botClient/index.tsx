@@ -16,14 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { addChatBarButton, ChatBarButton } from "@api/ChatButtons";
+import { addChatBarButton, ChatBarButton, removeChatBarButton } from "@api/ChatButtons";
 import {
     ApplicationCommandInputType,
     ApplicationCommandOptionType,
     findOption,
     sendBotMessage,
 } from "@api/Commands";
-import { addButton } from "@api/MessagePopover";
+import { addButton, removeButton } from "@api/MessagePopover";
 import { definePluginSettings } from "@api/Settings";
 import {
     getCurrentChannel,
@@ -142,7 +142,7 @@ const IconChatButton: ChatBarButton = () => {
                         content: "Error sending embed.\n" + e.message,
                     });
                 });
-        }} />)} tooltip="Embed Editor">
+        }} />)} tooltip="Embed Maker">
             {iconSvg()}
         </ChatBarButton>
     );
@@ -243,7 +243,7 @@ export default definePlugin({
         },
     ],
     enabledByDefault: true,
-    dependencies: ["CommandsAPI"],
+    dependencies: ["CommandsAPI", "MessagePopoverAPI", "ChatInputButtonAPI"],
     settings: definePluginSettings({
         showMemberList: {
             description: "Allow fetching member list sidebar",
@@ -257,6 +257,20 @@ export default definePlugin({
             type: OptionType.NUMBER,
             default: 2,
             restartNeeded: false,
+        },
+        embedChatButton: {
+            description:
+                "Add a button to show the Embed Editor modal in the chat bar",
+            type: OptionType.BOOLEAN,
+            default: true,
+            restartNeeded: true,
+        },
+        embedEditMessageButton: {
+            description:
+                "Add a button to show Embed Editor modal in messages",
+            type: OptionType.BOOLEAN,
+            default: true,
+            restartNeeded: true,
         },
     }),
     required: true,
@@ -871,47 +885,55 @@ if (URL.canParse(${text})) {
                 })
         );
 
-        addChatBarButton("EmbedButton", IconChatButton);
+        if (this.settings.store.embedChatButton) {
+            addChatBarButton("EmbedButton", IconChatButton);
+        } else {
+            removeChatBarButton("EmbedButton");
+        }
 
-        addButton("EmbedEditor", msg => {
-            const handler = async () => {
-                if (msg.author.id !== UserStore.getCurrentUser().id) {
-                    return showToast("This is not your message", 2);
-                }
-                if (msg.embeds.filter(e => e.type === "rich").length === 0) {
-                    return showToast("There is no valid embed in the message", 2);
-                }
-                showToast("Fetching message...", 1);
-                // Fetch raw msg from discord
-                const msgRaw = await RestAPI.get({
-                    url: `/channels/${msg.channel_id}/messages/${msg.id}`,
-                });
-                openModal(props => <EmbedEditorModal modalProps={props} callbackSendEmbed={function (data, msgData) {
-                    RestAPI.patch({
+        if (this.settings.store.embedEditMessageButton) {
+            addButton("EmbedEditor", msg => {
+                const handler = async () => {
+                    if (msg.author.id !== UserStore.getCurrentUser().id) {
+                        return showToast("This is not your message", 2);
+                    }
+                    if (msg.embeds.filter(e => e.type === "rich").length === 0) {
+                        return showToast("There is no valid embed in the message", 2);
+                    }
+                    showToast("Fetching message...", 1);
+                    // Fetch raw msg from discord
+                    const msgRaw = await RestAPI.get({
                         url: `/channels/${msg.channel_id}/messages/${msg.id}`,
-                        body: msgData,
-                    })
-                        .then(() => {
-                            return sendBotMessage(msg.channel_id, {
-                                content: "Embed edited!",
-                            });
+                    });
+                    openModal(props => <EmbedEditorModal modalProps={props} callbackSendEmbed={function (data, msgData) {
+                        RestAPI.patch({
+                            url: `/channels/${msg.channel_id}/messages/${msg.id}`,
+                            body: msgData,
                         })
-                        .catch(e => {
-                            return sendBotMessage(msg.channel_id, {
-                                content: "Error editing embed.\n" + e.message,
+                            .then(() => {
+                                return sendBotMessage(msg.channel_id, {
+                                    content: "Embed edited!",
+                                });
+                            })
+                            .catch(e => {
+                                return sendBotMessage(msg.channel_id, {
+                                    content: "Error editing embed.\n" + e.message,
+                                });
                             });
-                        });
-                }} messageRaw={msgRaw.body} />);
-            };
-            return {
-                label: "Embed Editor",
-                icon: iconSvg,
-                message: msg,
-                channel: ChannelStore.getChannel(msg.channel_id),
-                onClick: handler,
-                onContextMenu: handler,
-            };
-        });
+                    }} messageRaw={msgRaw.body} />);
+                };
+                return {
+                    label: "Embed Editor",
+                    icon: iconSvg,
+                    message: msg,
+                    channel: ChannelStore.getChannel(msg.channel_id),
+                    onClick: handler,
+                    onContextMenu: handler,
+                };
+            });
+        } else {
+            removeButton("EmbedEditor");
+        }
 
         function calculateMemberListId(
             channel: Channel,
