@@ -438,8 +438,11 @@ if (${closeCode} === 4013) {
                             str +
                             `
 if ("MESSAGE_CREATE" === ${eventName} && !${data}.guild_id && !Vencord.Webpack.findByProps("getChannel", "getBasicChannel")?.getChannel(${data}.channel_id)) {
-    return fetchChannel(${data}.channel_id).then(i => this.dispatcher.receiveDispatch(i, "CHANNEL_CREATE", ${N})).catch((err) => {
-        const i = {
+    return fetchChannel(${data}.channel_id).then(channel => {
+        this.dispatcher.receiveDispatch(channel, "CHANNEL_CREATE", ${N});
+        electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
+    }).catch((err) => {
+        const channel = {
             type: 1,
             recipients: [${data}.author ?? ${data}.user ?? {
                 id: ${data}.user_id
@@ -449,8 +452,12 @@ if ("MESSAGE_CREATE" === ${eventName} && !${data}.guild_id && !Vencord.Webpack.f
             id: ${data}.channel_id,
             flags: 0
         };
-        this.dispatcher.receiveDispatch(i, "CHANNEL_CREATE", ${N});
-    }).finally(() => this.dispatcher.receiveDispatch(${data}, ${eventName}, ${N}));
+        this.dispatcher.receiveDispatch(channel, "CHANNEL_CREATE", ${N});
+        electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
+    }).finally((i) => {
+        console.log("Add Private channel (From MESSAGE_CREATE event)");
+        return this.dispatcher.receiveDispatch(${data}, ${eventName}, ${N});
+    });
 }
 if ("READY_SUPPLEMENTAL" === ${eventName}) {
     // Patch Status
@@ -474,9 +481,10 @@ if ("READY_SUPPLEMENTAL" === ${eventName}) {
     });
 }
 if ("READY" === ${eventName}) {
+console.log("guild start:", ${data});
 ${data}.users = [
 	...(${data}.users || []),
-	electron.getOwner(),
+	...electron.getPrivateChannelLogin('817229550684471297').map(c => c.recipients[0]),
 ];
 ${data}.user_settings_proto = electron.getSettingProto1(${data}.user.id);
 ${data}.user_guild_settings = {
@@ -495,17 +503,17 @@ ${data}.tutorial = null;
 ${data}.sessions = [];
 ${data}.relationships = [];
 ${data}.read_state = {
-	version: 1196697,
+	version: 1176,
 	partial: false,
 	entries: [],
 };
-${data}.private_channels = electron.getPrivateChannelLogin();
+${data}.private_channels = electron.getPrivateChannelLogin(${data}.user.id);
 ${data}.guild_join_requests = [];
 ${data}.guild_experiments = electron.getGuildExperiments();
 ${data}.friend_suggestion_count = 0;
 ${data}.experiments = electron.getUserExperiments();
 ${data}.connected_accounts = [];
-${data}.auth_session_id_hash = "G0V9YBhBm+PElWFlIJLj9zN5vGAbRD9uKB9iZnl5VEk=";
+${data}.auth_session_id_hash = "VjFaa2MyTnRTalZOVjNCb1VqQmFNVlJHWkVkalFUMDk=";
 ${data}.analytics_token = null;
 ${data}.auth = {
 	authenticator_types: [2, 3],
@@ -531,7 +539,7 @@ ${data}.consents = {
 ${varToken} = ${varToken}.replace(/bot/gi,"").trim();
 const botInfo = await electron.getBotInfo(${varToken});
 this.token = ${varToken};
-console.log(botInfo);
+console.log("Get Bot info". botInfo);
 if (!botInfo.success) {
 	showToast("Login Failure: " + botInfo.message, 2);
 	return this._handleClose(!0, 4004, botInfo.message);
@@ -772,6 +780,49 @@ if (URL.canParse(${text})) {
                         return "onClick:$self.validateTokenAndLogin,onClick_:";
                     },
                 }
+            ]
+        },
+        // Try handle Private Channel
+        {
+            find: "async openPrivateChannel(",
+            replacement: [
+                {
+                    match: /(async openPrivateChannel)(\(\w+\){)/,
+                    replace: function (strOriginal, first, second) {
+                        return `async openPrivateChannel(e){
+                        // Check Bot account
+                        if (Vencord.Webpack.Common.UserStore.getUser(arguments[0])?.bot) {
+                            showToast("Cannot send messages to this user (User.bot = True)", 2);
+                            return;
+                        }
+                        const result = await this.openPrivateChannel_.apply(this, arguments);
+                        electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0], result);
+                        },${first}_${second}`
+                    }
+                },
+                {
+                    match: /closePrivateChannel\(\w+\){/,
+                    replace: function (str) {
+                        return `${str}electron.handleClosePrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0]);`
+                    }
+                }
+            ]
+        },
+        {
+            find: "}getOldestUnreadMessageId(",
+            replacement: [
+                {
+                    match: /}getOldestUnreadMessageId\(\w+\){/,
+                    replace: function (strOriginal) {
+                        return `${strOriginal}return null;`
+                    }
+                },
+                {
+                    match: /}getOldestUnreadTimestamp\(\w+\){/,
+                    replace: function (strOriginal) {
+                        return `${strOriginal}return 0;`
+                    }
+                },
             ]
         }
     ],
@@ -1152,5 +1203,5 @@ if (URL.canParse(${text})) {
             window.currentShard = 0;
             LoginToken.loginToken(state);
         }
-    }
+    },
 });
