@@ -484,7 +484,7 @@ if ("READY" === ${eventName}) {
 console.log("guild start:", ${data});
 ${data}.users = [
 	...(${data}.users || []),
-	...electron.getPrivateChannelLogin('817229550684471297').map(c => c.recipients[0]),
+	...electron.getPrivateChannelLogin(${data}.user.id).map(c => c.recipients[0]),
 ];
 ${data}.user_settings_proto = electron.getSettingProto1(${data}.user.id);
 ${data}.user_guild_settings = {
