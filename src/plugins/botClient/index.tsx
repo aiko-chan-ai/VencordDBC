@@ -32,21 +32,30 @@ import {
 import { Logger } from "@utils/Logger";
 import { openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
-import { findByProps, findByPropsLazy } from "@webpack";
+import { findByProps, findByPropsLazy, findStoreLazy } from "@webpack";
 import {
+    Alerts,
     ChannelStore,
+    Constants,
+    DraftStore,
+    DraftType,
     FluxDispatcher,
+    Forms,
     GuildMemberStore,
     GuildStore,
+    MessageActions,
     PermissionsBits,
+    PermissionStore,
     PresenceStore,
     React,
     RestAPI,
     SelectedChannelStore,
     showToast,
+    Toasts,
     UserStore,
     useState,
 } from "@webpack/common";
+
 import { Channel } from "discord-types/general";
 
 import EmbedEditorModal from "./components/EmbedEditor";
@@ -77,6 +86,70 @@ const PermissionUtil = findByPropsLazy(
 ) as {
     computePermissions({ ...args }): bigint;
 };
+// Fake Nitro plugin
+function hasPermission(channelId: string, permission: bigint) {
+    const channel = ChannelStore.getChannel(channelId);
+
+    if (!channel || channel.isPrivate()) return true;
+
+    return PermissionStore.can(permission, channel);
+}
+
+const hasEmbedPerms = (channelId: string) => hasPermission(channelId, PermissionsBits.EMBED_LINKS);
+// Message Preview plugin
+const UploadStore = findByPropsLazy("getUploads");
+
+const getDraft = (channelId: string) => DraftStore.getDraft(channelId, DraftType.ChannelMessage);
+
+const getAttachments = (channelId: string): {
+    id: string;
+    uniqueId: string;
+    filename: string;
+    item: {
+        file: {};
+        platform: number;
+        isThumbnail: boolean;
+    };
+    spoiler: boolean;
+    description: string | null;
+    classification: string;
+    isImage: boolean;
+    isVideo: boolean;
+    uploadedFilename: string;
+    showLargeMessageDialog: boolean;
+    mimeType: string;
+    isThumbnail: boolean;
+    RESUME_INCOMPLETE_CODES: number[];
+    status: "NOT_STARTED" | "STARTED" | "UPLOADING" | "ERROR" | "COMPLETED" | "CANCELED";
+    channelId: string;
+    responseUrl: string;
+    currentSize: number;
+    preCompressionSize: number;
+    loaded: number;
+    reactNativeFileIndex: number;
+    reactNativeFilePrepped: boolean;
+    startTime: number;
+    uploadAnalytics: {
+        timing: {
+            getUploadUrlTimeMs: number;
+            uploadTimeMs: number;
+        };
+    };
+    cancel: () => void;
+    delete: () => void;
+    getSize: () => void;
+    setFilename: (filename: string) => void;
+    upload: () => Promise<void>;
+    uploadFileToCloud: () => void;
+    on: (eventName: "error" | "complete", callback: () => any) => void;
+    once: (eventName: "error" | "complete", callback: () => any) => void;
+    emit: (eventName: "error" | "complete", ...args: any[]) => void;
+    removeListener: (eventName: "error" | "complete", callback: () => any) => void;
+    removeAllListeners: () => void;
+}[] => UploadStore.getUploads(channelId, DraftType.ChannelMessage);
+
+// Voice Message plugin
+const PendingReplyStore = findStoreLazy("PendingReplyStore");
 
 class SnowflakeUtil extends null {
     static generate(timestamp: Date | number = Date.now()) {
@@ -119,34 +192,6 @@ class SnowflakeUtil extends null {
         return EPOCH;
     }
 }
-
-const IconChatButton: ChatBarButton = () => {
-    return (
-        <ChatBarButton onClick={() => openModal(props => <EmbedEditorModal modalProps={props} callbackSendEmbed={function (data, msg) {
-            const channelId = SelectedChannelStore.getChannelId();
-            RestAPI.post({
-                url: `/channels/${channelId}/messages`,
-                body: {
-                    embeds: [
-                        data,
-                    ],
-                },
-            })
-                .then(() => {
-                    return sendBotMessage(channelId, {
-                        content: "Embed sent!",
-                    });
-                })
-                .catch(e => {
-                    return sendBotMessage(channelId, {
-                        content: "Error sending embed.\n" + e.message,
-                    });
-                });
-        }} />)} tooltip="Embed Maker">
-            {iconSvg()}
-        </ChatBarButton>
-    );
-};
 
 function RenderTokenLogin() {
     const [state, setState] = useState<string>();
@@ -272,6 +317,23 @@ export default definePlugin({
             default: true,
             restartNeeded: true,
         },
+        clearDraftAfterSendingEmbed: {
+            description: "Should draft messages be deleted after sending an embed?",
+            type: OptionType.BOOLEAN,
+            default: true,
+            restartNeeded: false,
+        },
+        saveDirectMessage: {
+            // $self.settings.store.saveDirectMessage
+            // Vencord.Plugins.plugins.BotClient.settings.store.saveDirectMessage = false
+            description: "Whether or not to save private channels to storage?",
+            type: OptionType.BOOLEAN,
+            default: true,
+            restartNeeded: false,
+            onChange: (value: boolean) => {
+                if (!value) window.electron.clearDMsCache(UserStore.getCurrentUser().id);
+            }
+        }
     }),
     required: true,
     patches: [
@@ -440,7 +502,7 @@ if (${closeCode} === 4013) {
 if ("MESSAGE_CREATE" === ${eventName} && !${data}.guild_id && !Vencord.Webpack.findByProps("getChannel", "getBasicChannel")?.getChannel(${data}.channel_id)) {
     return fetchChannel(${data}.channel_id).then(channel => {
         this.dispatcher.receiveDispatch(channel, "CHANNEL_CREATE", ${N});
-        electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
+        if ($self.settings.store.saveDirectMessage) electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
     }).catch((err) => {
         const channel = {
             type: 1,
@@ -453,7 +515,7 @@ if ("MESSAGE_CREATE" === ${eventName} && !${data}.guild_id && !Vencord.Webpack.f
             flags: 0
         };
         this.dispatcher.receiveDispatch(channel, "CHANNEL_CREATE", ${N});
-        electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
+        if ($self.settings.store.saveDirectMessage) electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
     }).finally((i) => {
         console.log("Add Private channel (From MESSAGE_CREATE event)");
         return this.dispatcher.receiveDispatch(${data}, ${eventName}, ${N});
@@ -481,10 +543,10 @@ if ("READY_SUPPLEMENTAL" === ${eventName}) {
     });
 }
 if ("READY" === ${eventName}) {
-console.log("guild start:", ${data});
+console.log("Guild start:", ${data});
 ${data}.users = [
 	...(${data}.users || []),
-	...electron.getPrivateChannelLogin(${data}.user.id).map(c => c.recipients[0]),
+	...electron.getPrivateChannelLogin(${data}.user.id, $self.settings.store.saveDirectMessage).map(c => c.recipients[0]),
 ];
 ${data}.user_settings_proto = electron.getSettingProto1(${data}.user.id);
 ${data}.user_guild_settings = {
@@ -507,7 +569,7 @@ ${data}.read_state = {
 	partial: false,
 	entries: [],
 };
-${data}.private_channels = electron.getPrivateChannelLogin(${data}.user.id);
+${data}.private_channels = electron.getPrivateChannelLogin(${data}.user.id, $self.settings.store.saveDirectMessage);
 ${data}.guild_join_requests = [];
 ${data}.guild_experiments = electron.getGuildExperiments();
 ${data}.friend_suggestion_count = 0;
@@ -633,16 +695,6 @@ return t ? \`Bot \${t.replace(/bot/gi,"").trim()}\` : null`;
                 },
             ],
         },
-        {
-            // Don't delete localStorage
-            find: "delete window.localStorage",
-            replacement: [
-                {
-                    match: "delete window.localStorage",
-                    replace: "",
-                },
-            ],
-        },
         // Patch some unusable bot modules/methods
         {
             find: "resolveInvite:",
@@ -691,24 +743,19 @@ if (allShards > 1) {
                 },
             ],
         },
-        // Fix Copy Webhook URL
+        // Fix Copy URL
         {
-            find: "SUPPORTS_COPY:",
+            find: "document.execCommand(\"copy\")",
             replacement: [
                 {
-                    // function a(e){return!!r&&(o.isPlatformEmbedded?(n.default.copy(e),!0):t.copy(e))}
-                    match: /(function \w+\()(\w+)(\){)/,
-                    replace: function (str, ...args) {
-                        const text = args[1];
-                        return (
-                            str +
-                            `
-if (URL.canParse(${text})) {
-    ${text} = ${text}.replace(/https:\\/\\/localhost:\\d+/, "https://discord.com");
-    ${text} = ${text}.replace(/\\/bot/, '');
-}
-                    `
-                        );
+                    match: /function (\w+)\((\w+)\)({)(.*?)execCommand\("copy"\)/,
+                    replace: function (match, functionName, argument, bracket, codeMatch) {
+                        return match.replace(`function ${functionName}(${argument}){`, `function ${functionName}(${argument}){
+                            if (URL.canParse(${argument})) {
+                                ${argument} = ${argument}.replace(/https:\\/\\/localhost:\\d+/, "https://discord.com");
+                                ${argument} = ${argument}.replace(/\\/bot/, '');
+                            }
+                        `);
                     },
                 },
             ],
@@ -796,14 +843,14 @@ if (URL.canParse(${text})) {
                             return;
                         }
                         const result = await this.openPrivateChannel_.apply(this, arguments);
-                        electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0], result);
-                        },${first}_${second}`
+                        if ($self.settings.store.saveDirectMessage) electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0], result);
+                        },${first}_${second}`;
                     }
                 },
                 {
                     match: /closePrivateChannel\(\w+\){/,
                     replace: function (str) {
-                        return `${str}electron.handleClosePrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0]);`
+                        return `${str}if ($self.settings.store.saveDirectMessage) electron.handleClosePrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0]);`;
                     }
                 }
             ]
@@ -814,13 +861,13 @@ if (URL.canParse(${text})) {
                 {
                     match: /}getOldestUnreadMessageId\(\w+\){/,
                     replace: function (strOriginal) {
-                        return `${strOriginal}return null;`
+                        return `${strOriginal}return null;`;
                     }
                 },
                 {
                     match: /}getOldestUnreadTimestamp\(\w+\){/,
                     replace: function (strOriginal) {
-                        return `${strOriginal}return 0;`
+                        return `${strOriginal}return 0;`;
                     }
                 },
             ]
@@ -858,14 +905,14 @@ if (URL.canParse(${text})) {
                         Date.now() - 1209600000
                     );
                     const { body } = await RestAPI.get({
-                        url: `/channels/${ctx.channel.id}/messages?limit=${amount}`,
+                        url: Constants.Endpoints.MESSAGES(ctx.channel.id) + `?limit=${amount}`
                     });
                     const messages = body
                         .filter(m => BigInt(m.id) > BigInt(oldId))
                         .map(m => m.id);
                     try {
                         await RestAPI.post({
-                            url: `/channels/${ctx.channel.id}/messages/bulk-delete`,
+                            url: `${Constants.Endpoints.MESSAGES(ctx.channel.id)}/bulk-delete`,
                             body: {
                                 messages,
                             },
@@ -899,7 +946,7 @@ if (URL.canParse(${text})) {
                     sendBotMessage(ctx.channel.id, {
                         content: `### Invalid shardId
 🚫 Must be greater than or equal to **0** and less than or equal to **${window.allShards - 1
-}**.
+                            }**.
 **${id}** is an invalid number`,
                     });
                 } else {
@@ -925,19 +972,106 @@ if (URL.canParse(${text})) {
             "updateRelationship",
         ].forEach(
             a =>
-                (findByProps("fetchRelationships")[a] = function () {
-                    window.showToast(
-                        "Discord Bot Client cannot use Relationships Module",
-                        2
-                    );
-                    return Promise.reject(
-                        "Discord Bot Client cannot use Relationships Module"
-                    );
-                })
+            (findByProps("fetchRelationships")[a] = function () {
+                window.showToast(
+                    "Discord Bot Client cannot use Relationships Module",
+                    2
+                );
+                return Promise.reject(
+                    "Discord Bot Client cannot use Relationships Module"
+                );
+            })
         );
 
         if (this.settings.store.embedChatButton) {
-            addChatBarButton("EmbedButton", IconChatButton);
+            const plugin = this;
+            addChatBarButton("EmbedButton", (prop) => {
+                const handle = () => {
+                    const channelId = SelectedChannelStore.getChannelId();
+                    if (!hasEmbedPerms(channelId)) {
+                        return Alerts.show({
+                            title: "Hold on!",
+                            body: <div>
+                                <Forms.FormText>
+                                    You are trying to send a embed, however you do not have permissions to embed links in the
+                                    current channel.
+                                </Forms.FormText>
+                            </div>,
+                        });
+                    }
+                    return openModal(props => <EmbedEditorModal modalProps={props} callbackSendEmbed={async function (data, msg) {
+                        // waiting for attachments
+                        const attachments = getAttachments(channelId);
+                        const reply = PendingReplyStore.getPendingReply(channelId);
+                        const content = getDraft(channelId) || undefined;
+                        if (plugin.settings.store.clearDraftAfterSendingEmbed) {
+                            // Clear reply
+                            if (reply) FluxDispatcher.dispatch({ type: "DELETE_PENDING_REPLY", channelId });
+                            // Clear Draft message
+                            if (content) FluxDispatcher.dispatch({
+                                type: "DRAFT_CLEAR",
+                                channelId,
+                                draftType: DraftType.ChannelMessage,
+                            });
+                            // Clear attachments (not delete)
+                            if (attachments.length) FluxDispatcher.dispatch({
+                                type: "UPLOAD_ATTACHMENT_CLEAR_ALL_FILES",
+                                channelId,
+                                draftType: DraftType.ChannelMessage,
+                            });
+                        }
+                        if (attachments.length > 0) {
+                            showToast("Uploading attachments... Please be patient", Toasts.Type.MESSAGE);
+                            await Promise.all(attachments.map(a => {
+                                if (a.status === 'COMPLETED') {
+                                    return Promise.resolve(true);
+                                } else {
+                                    return new Promise(r => {
+                                        const callback = () => {
+                                            r(true);
+                                            a.removeListener("error", callback);
+                                            a.removeListener("complete", callback);
+                                        };
+                                        a.once("error", callback);
+                                        a.once("complete", callback);
+                                    });
+                                }
+                            }));
+                        }
+                        // Clear stickers :??? 404 not found ;-;
+                        RestAPI.post({
+                            url: Constants.Endpoints.MESSAGES(channelId),
+                            body: {
+                                embeds: [
+                                    data,
+                                ],
+                                content,
+                                attachments: attachments.map((a, index) => {
+                                    return {
+                                        id: index,
+                                        filename: a.filename,
+                                        uploaded_filename: a.uploadedFilename,
+                                    };
+                                }),
+                                message_reference: reply ? MessageActions.getSendMessageOptionsForReply(reply)?.messageReference : null,
+                            },
+                        })
+                            .then(() => {
+                                return showToast("Embed has been sent successfully", Toasts.Type.SUCCESS);
+                            })
+                            .catch(e => {
+                                return sendBotMessage(channelId, {
+                                    content: `\`❌\` An error occurred during sending message\nDiscord API Error [${e.body.code}]: ${e.body.message}`,
+                                });
+                            });
+                    }} isCreate={true} />);
+                };
+                return (
+                    <ChatBarButton onClick={handle} tooltip="Embed Maker">
+                        {iconSvg()}
+                    </ChatBarButton>
+                );
+            });
         } else {
             removeChatBarButton("EmbedButton");
         }
@@ -945,13 +1079,7 @@ if (URL.canParse(${text})) {
         if (this.settings.store.embedEditMessageButton) {
             addButton("EmbedEditor", msg => {
                 const handler = async () => {
-                    if (msg.author.id !== UserStore.getCurrentUser().id) {
-                        return showToast("This is not your message", 2);
-                    }
-                    if (msg.embeds.filter(e => e.type === "rich").length === 0) {
-                        return showToast("There is no valid embed in the message", 2);
-                    }
-                    showToast("Fetching message...", 1);
+                    showToast("Fetching message...", Toasts.Type.MESSAGE);
                     // Fetch raw msg from discord
                     const msgRaw = await RestAPI.get({
                         url: `/channels/${msg.channel_id}/messages/${msg.id}`,
@@ -971,16 +1099,20 @@ if (URL.canParse(${text})) {
                                     content: "Error editing embed.\n" + e.message,
                                 });
                             });
-                    }} messageRaw={msgRaw.body} />);
+                    }} messageRaw={msgRaw.body} isCreate={false} />);
                 };
-                return {
-                    label: "Embed Editor",
-                    icon: iconSvg,
-                    message: msg,
-                    channel: ChannelStore.getChannel(msg.channel_id),
-                    onClick: handler,
-                    onContextMenu: handler,
-                };
+                if (msg.author.id === UserStore.getCurrentUser().id && msg.embeds.filter(e => e.type === "rich").length > 0) {
+                    return {
+                        label: "Embed Editor",
+                        icon: iconSvg,
+                        message: msg,
+                        channel: ChannelStore.getChannel(msg.channel_id),
+                        onClick: handler,
+                        onContextMenu: handler,
+                    };
+                } else {
+                    return null;
+                }
             });
         } else {
             removeButton("EmbedEditor");

@@ -55,32 +55,48 @@ export default function EmbedEditorModal({
     modalProps,
     callbackSendEmbed,
     messageRaw,
+    isCreate,
 }: {
     modalProps: ModalProps;
     callbackSendEmbed: (data: any, msg: any) => void;
     messageRaw?: any;
+    isCreate?: boolean;
 }) {
     const [indexE, setIndexE] = React.useState(0);
     // Msg
     let firstEmbed: any;
     if (messageRaw?.embeds?.length) {
-        messageRaw.embeds = messageRaw.embeds.filter(e => e.type === "rich");
+        messageRaw.embeds = messageRaw.embeds.filter((e) => e.type === "rich");
         firstEmbed = messageRaw.embeds[indexE];
     }
 
-    const text = "かわいい";
+    const text = "ヾ(≧▽≦*)o";
     // Author
-    const [authorTitle, setAuthorTitle] = React.useState<string>(firstEmbed?.author?.name);
-    const [authorURL, setAuthorURL] = React.useState<string>(firstEmbed?.author?.url);
-    const [authorImage, setAuthorImage] = React.useState<string>(firstEmbed?.author?.icon_url);
+    const [authorTitle, setAuthorTitle] = React.useState<string>(
+        firstEmbed?.author?.name
+    );
+    const [authorURL, setAuthorURL] = React.useState<string>(
+        firstEmbed?.author?.url
+    );
+    const [authorImage, setAuthorImage] = React.useState<string>(
+        firstEmbed?.author?.icon_url
+    );
     // Body
     const [title, setTitle] = React.useState<string>(firstEmbed?.title);
-    const [description, setDescription] = React.useState<string>(firstEmbed?.description);
+    const [description, setDescription] = React.useState<string>(
+        firstEmbed?.description
+    );
     const [url, setURL] = React.useState<string>(firstEmbed?.url);
-    const [color, setColor] = React.useState<string>((typeof firstEmbed === "object" && "color" in firstEmbed ? "#" + firstEmbed.color.toString(16) : undefined) as string);
+    const [color, setColor] = React.useState<string>(
+        (typeof firstEmbed === "object" && "color" in firstEmbed
+            ? "#" + firstEmbed.color.toString(16)
+            : undefined) as string
+    );
     // Image
     const [image, setImage] = React.useState<string>(firstEmbed?.image?.url);
-    const [thumbnail, setThumbnail] = React.useState<string>(firstEmbed?.thumbnail?.url);
+    const [thumbnail, setThumbnail] = React.useState<string>(
+        firstEmbed?.thumbnail?.url
+    );
     // Fields
     const [fields, setFields] = React.useState<
         {
@@ -98,10 +114,15 @@ export default function EmbedEditorModal({
     ]);
     if (fields.length > 25) fields.splice(25);
     // Footer
-    const [footerTitle, setFooterTitle] = React.useState<string>(firstEmbed?.footer?.text);
-    const [footerURL, setFooterURL] = React.useState<string>(firstEmbed?.footer?.icon_url);
-    const [footerTimestamp, setFooterTimestamp] =
-        React.useState<boolean>(!!firstEmbed?.timestamp);
+    const [footerTitle, setFooterTitle] = React.useState<string>(
+        firstEmbed?.footer?.text
+    );
+    const [footerURL, setFooterURL] = React.useState<string>(
+        firstEmbed?.footer?.icon_url
+    );
+    const [footerTimestamp, setFooterTimestamp] = React.useState<boolean>(
+        !!firstEmbed?.timestamp
+    );
 
     const debouncedSetColor = useDebounce((newColor: string) => {
         setColor(newColor);
@@ -134,7 +155,7 @@ export default function EmbedEditorModal({
         <ModalRoot {...modalProps} size={ModalSize.DYNAMIC}>
             <ModalHeader>
                 <Text variant="heading-lg/bold" style={{ flexGrow: 1 }}>
-                    Embed Editor
+                    Embed Builder
                 </Text>
                 <ModalCloseButton
                     onClick={modalProps.onClose}
@@ -163,16 +184,16 @@ export default function EmbedEditorModal({
                             <div style={{ flex: 1 }}>
                                 <Forms.FormTitle>URL</Forms.FormTitle>
                                 <TextInput
-                                    placeholder={text}
+                                    placeholder="https://discord.com/"
                                     onChange={setAuthorURL}
                                     value={authorURL}
                                     spellCheck={false}
                                 />
                             </div>
                             <div style={{ flex: 1, marginRight: 0 }}>
-                                <Forms.FormTitle>Image</Forms.FormTitle>
+                                <Forms.FormTitle>Image URL</Forms.FormTitle>
                                 <TextInput
-                                    placeholder={text}
+                                    placeholder="https://i.imgur.com/image.png"
                                     onChange={setAuthorImage}
                                     value={authorImage}
                                     spellCheck={false}
@@ -202,7 +223,7 @@ export default function EmbedEditorModal({
                                 <div>
                                     <Forms.FormTitle>URL</Forms.FormTitle>
                                     <TextInput
-                                        placeholder={text}
+                                        placeholder="https://discord.com/"
                                         onChange={setURL}
                                         value={url}
                                         spellCheck={false}
@@ -223,7 +244,7 @@ export default function EmbedEditorModal({
                                                 type="color"
                                                 name="embed-color-picker"
                                                 value={color}
-                                                onChange={event => {
+                                                onChange={(event) => {
                                                     const hex =
                                                         event.target.value;
                                                     debouncedSetColor(hex);
@@ -263,7 +284,7 @@ export default function EmbedEditorModal({
                             <div style={{ flex: 1, marginLeft: 0 }}>
                                 <Forms.FormTitle>Thumbnail URL</Forms.FormTitle>
                                 <TextInput
-                                    placeholder={text}
+                                    placeholder="https://i.imgur.com/image.png"
                                     onChange={setThumbnail}
                                     value={thumbnail}
                                     spellCheck={false}
@@ -272,7 +293,7 @@ export default function EmbedEditorModal({
                             <div style={{ flex: 1, marginRight: 0 }}>
                                 <Forms.FormTitle>Image URL</Forms.FormTitle>
                                 <TextInput
-                                    placeholder={text}
+                                    placeholder="attachment://image.png"
                                     onChange={setImage}
                                     value={image}
                                     spellCheck={false}
@@ -314,7 +335,7 @@ export default function EmbedEditorModal({
                                                 <TextInput
                                                     placeholder="Name"
                                                     value={field.name}
-                                                    onChange={value =>
+                                                    onChange={(value) =>
                                                         handlerAddField(
                                                             index,
                                                             "name",
@@ -334,7 +355,7 @@ export default function EmbedEditorModal({
                                                 <TextInput
                                                     placeholder="Value"
                                                     value={field.value}
-                                                    onChange={value =>
+                                                    onChange={(value) =>
                                                         handlerAddField(
                                                             index,
                                                             "value",
@@ -357,7 +378,7 @@ export default function EmbedEditorModal({
                                                 background: "none",
                                                 color: "var(--status-danger)",
                                                 ...(field.name.length &&
-                                                field.value.length
+                                                    field.value.length
                                                     ? {}
                                                     : {
                                                         visibility: "hidden",
@@ -370,7 +391,7 @@ export default function EmbedEditorModal({
                                     </Flex>
                                     <Switch
                                         value={field.inline}
-                                        onChange={value =>
+                                        onChange={(value) =>
                                             handlerAddField(
                                                 index,
                                                 "inline",
@@ -404,9 +425,9 @@ export default function EmbedEditorModal({
                                 />
                             </div>
                             <div style={{ flex: 1 }}>
-                                <Forms.FormTitle>Image</Forms.FormTitle>
+                                <Forms.FormTitle>Image URL</Forms.FormTitle>
                                 <TextInput
-                                    placeholder={text}
+                                    placeholder="https://i.imgur.com/image.png"
                                     onChange={setFooterURL}
                                     value={footerURL}
                                     spellCheck={false}
@@ -424,54 +445,134 @@ export default function EmbedEditorModal({
                             </Switch>
                         </div>
                     </Card>
-                    <Card style={{ padding: "1em 1em 0" }}>
-                        <Forms.FormTitle
-                            style={{ width: "fit-content" }}
-                            tag="h3"
-                        >
-                            Select Embeds
-                        </Forms.FormTitle>
-                        <Flex flexDirection="row" style={{ padding: 12 }}>
-                            <Slider
-                                minValue={1}
-                                maxValue={(messageRaw?.embeds?.length || 0) + 1}
-                                asValueChanges={(va: number) => {
-                                    va = Math.round(va);
-                                    setIndexE(va-1);
-                                    setFields([
-                                        ...(firstEmbed?.fields ? firstEmbed.fields : []),
-                                        {
-                                            name: "",
-                                            value: "",
-                                            inline: false,
-                                        },
-                                    ]);
-                                    if (fields.length > 25) fields.splice(25);
-                                    // Author
-                                    if (typeof firstEmbed?.author?.name === "string") setAuthorTitle(firstEmbed?.author?.name);
-                                    if (typeof firstEmbed?.author?.url === "string") setAuthorURL(firstEmbed?.author?.url);
-                                    if (typeof firstEmbed?.author?.icon_url === "string") setAuthorImage(firstEmbed?.author?.icon_url);
-                                    // Body
-                                    if (typeof firstEmbed?.title === "string") setTitle(firstEmbed?.title);
-                                    if (typeof firstEmbed?.description === "string") setDescription(firstEmbed?.description);
-                                    if (typeof firstEmbed?.url === "string") setURL(firstEmbed?.url);
-                                    if (typeof firstEmbed === "object" && "color" in firstEmbed && typeof firstEmbed?.color === "number") setColor("#" + firstEmbed.color.toString(16));
-                                    // Image
-                                    if (typeof firstEmbed?.image?.url === "string") setImage(firstEmbed?.image?.url);
-                                    if (typeof firstEmbed?.thumbnail?.url === "string") setThumbnail(firstEmbed?.thumbnail?.url);
-                                    // Footer
-                                    if (typeof firstEmbed?.footer?.text === "string") setFooterTitle(firstEmbed?.footer?.text);
-                                    if (typeof firstEmbed?.footer?.icon_url === "string") setFooterURL(firstEmbed?.footer?.icon_url);
-                                    setFooterTimestamp(!!firstEmbed?.timestamp);
-                                }}
-                                initialValue={1}
-                                orientation={"vertical"}
-                                onValueRender={(va: number) => String(Math.round(va))}
-                                stickToMarkers={true}
-                                markers={Array.from(new Array(messageRaw?.embeds?.length || 0), (_, i) => i+1)}
-                            />
-                        </Flex>
-                    </Card>
+                    {isCreate ? (
+                        <span></span>
+                    ) : (
+                        <Card style={{ padding: "1em 1em 0" }}>
+                            <Forms.FormTitle
+                                style={{ width: "fit-content" }}
+                                tag="h3"
+                            >
+                                Select Embeds (Edit mode)
+                            </Forms.FormTitle>
+                            <Flex flexDirection="row" style={{ padding: 12 }}>
+                                <Slider
+                                    minValue={1}
+                                    maxValue={
+                                        (messageRaw?.embeds?.length || 0) + 1
+                                    }
+                                    asValueChanges={(va: number) => {
+                                        va = Math.round(va);
+                                        setIndexE(va - 1);
+                                        setFields([
+                                            ...(firstEmbed?.fields
+                                                ? firstEmbed.fields
+                                                : []),
+                                            {
+                                                name: "",
+                                                value: "",
+                                                inline: false,
+                                            },
+                                        ]);
+                                        if (fields.length > 25)
+                                            fields.splice(25);
+                                        // Author
+                                        if (
+                                            typeof firstEmbed?.author?.name ===
+                                            "string"
+                                        )
+                                            setAuthorTitle(
+                                                firstEmbed?.author?.name
+                                            );
+                                        if (
+                                            typeof firstEmbed?.author?.url ===
+                                            "string"
+                                        )
+                                            setAuthorURL(
+                                                firstEmbed?.author?.url
+                                            );
+                                        if (
+                                            typeof firstEmbed?.author
+                                                ?.icon_url === "string"
+                                        )
+                                            setAuthorImage(
+                                                firstEmbed?.author?.icon_url
+                                            );
+                                        // Body
+                                        if (
+                                            typeof firstEmbed?.title ===
+                                            "string"
+                                        )
+                                            setTitle(firstEmbed?.title);
+                                        if (
+                                            typeof firstEmbed?.description ===
+                                            "string"
+                                        )
+                                            setDescription(
+                                                firstEmbed?.description
+                                            );
+                                        if (typeof firstEmbed?.url === "string")
+                                            setURL(firstEmbed?.url);
+                                        if (
+                                            typeof firstEmbed === "object" &&
+                                            "color" in firstEmbed &&
+                                            typeof firstEmbed?.color ===
+                                            "number"
+                                        )
+                                            setColor(
+                                                "#" +
+                                                firstEmbed.color.toString(
+                                                    16
+                                                )
+                                            );
+                                        // Image
+                                        if (
+                                            typeof firstEmbed?.image?.url ===
+                                            "string"
+                                        )
+                                            setImage(firstEmbed?.image?.url);
+                                        if (
+                                            typeof firstEmbed?.thumbnail
+                                                ?.url === "string"
+                                        )
+                                            setThumbnail(
+                                                firstEmbed?.thumbnail?.url
+                                            );
+                                        // Footer
+                                        if (
+                                            typeof firstEmbed?.footer?.text ===
+                                            "string"
+                                        )
+                                            setFooterTitle(
+                                                firstEmbed?.footer?.text
+                                            );
+                                        if (
+                                            typeof firstEmbed?.footer
+                                                ?.icon_url === "string"
+                                        )
+                                            setFooterURL(
+                                                firstEmbed?.footer?.icon_url
+                                            );
+                                        setFooterTimestamp(
+                                            !!firstEmbed?.timestamp
+                                        );
+                                    }}
+                                    initialValue={1}
+                                    orientation={"vertical"}
+                                    onValueRender={(va: number) =>
+                                        String(Math.round(va))
+                                    }
+                                    stickToMarkers={true}
+                                    markers={Array.from(
+                                        new Array(
+                                            messageRaw?.embeds?.length || 0
+                                        ),
+                                        (_, i) => i + 1
+                                    )}
+                                />
+                            </Flex>
+                        </Card>
+                    )}
                 </Flex>
             </ModalContent>
             <ModalFooter>
@@ -501,7 +602,7 @@ export default function EmbedEditorModal({
                                 }
                             }
                             const ava = fields.filter(
-                                f => f.name.length && f.value.length
+                                (f) => f.name.length && f.value.length
                             );
                             if (ava.length) embed.fields = ava;
                             if (authorTitle) {
@@ -549,7 +650,7 @@ export default function EmbedEditorModal({
                             }
                         }}
                     >
-                        {messageRaw ? "Edit" : "Create"}
+                        {isCreate ? "Create it !" : "Edit it !"}
                     </Button>
                 </Flex>
             </ModalFooter>
