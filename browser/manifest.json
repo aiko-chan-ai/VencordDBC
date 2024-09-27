@@ -12,7 +12,8 @@
 
     "host_permissions": [
         "*://*.discord.com/*",
-        "https://raw.githubusercontent.com/*"
+        "https://raw.githubusercontent.com/*",
+        "<all_urls>"
     ],
 
     "permissions": ["declarativeNetRequest"],
@@ -20,14 +21,14 @@
     "content_scripts": [
         {
             "run_at": "document_start",
-            "matches": ["*://*.discord.com/*"],
+            "matches": ["*://*.discord.com/*", "<all_urls>"],
             "js": ["content.js"],
             "all_frames": true,
             "world": "ISOLATED"
         },
         {
             "run_at": "document_start",
-            "matches": ["*://*.discord.com/*"],
+            "matches": ["*://*.discord.com/*", "<all_urls>"],
             "js": ["dist/Vencord.js"],
             "all_frames": true,
             "world": "MAIN"
@@ -37,7 +38,7 @@
     "web_accessible_resources": [
         {
             "resources": ["dist/*", "third-party/*"],
-            "matches": ["*://*.discord.com/*"]
+            "matches": ["*://*.discord.com/*", "<all_urls>"]
         }
     ],
 
