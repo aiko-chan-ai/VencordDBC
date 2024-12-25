@@ -69,9 +69,9 @@ import { iconSvg } from "./icon.svg";
 const EPOCH = 1_420_070_400_000;
 let INCREMENT = BigInt(0);
 
-const GetToken = findByPropsLazy("getToken");
-const LoginToken = findByPropsLazy("loginToken");
-const murmurhash = findByPropsLazy("v3");
+const GetToken = findByPropsLazy("getToken", "setToken");
+const LoginToken = findByPropsLazy("loginToken", "login");
+const murmurhash = findByPropsLazy("v3", "v2");
 
 const BotClientLogger = new Logger("BotClient", "#ff88f3");
 
@@ -239,7 +239,7 @@ function RenderTokenLogin() {
                             setError("Invalid token");
                             return;
                         }
-                        window.currentShard = 0;
+                        window.sessionStorage.setItem('currentShard', '0');
                         LoginToken.loginToken(state);
                     }}
                 >
@@ -338,12 +338,22 @@ export default definePlugin({
             default: true,
             restartNeeded: false,
             onChange: (value: boolean) => {
-                if (!value) window.electron.clearDMsCache(UserStore.getCurrentUser().id);
+                if (!value) window.BotClientNative.clearDMsCache(UserStore.getCurrentUser().id);
             }
         }
     }),
     required: true,
     patches: [
+        // Don't delete sessionStorage
+        {
+            find: "delete window.sessionStorage",
+            replacement: [
+                {
+                    match: /delete window\.sessionStorage/,
+                    replace: "",
+                },
+            ],
+        },
         {
             find: "{type:\"LOGOUT\"}",
             replacement: [
@@ -462,20 +472,20 @@ return;
                             str +
                             `
 if (${data}.guildId) {
-  if (${data}.guildId !== lasestGuildIdVoiceConnect) {
+  if (${data}.guildId !== window.sessionStorage.getItem('lasestGuildIdVoiceConnect')) {
     // Disconnect
     this.send(4, {
-        guild_id: lasestGuildIdVoiceConnect,
+        guild_id: window.sessionStorage.getItem('lasestGuildIdVoiceConnect'),
         channel_id: null,
         self_mute: ${data}.selfMute,
         self_deaf: ${data}.selfDeaf,
     });
     // Switch Guild
-    lasestGuildIdVoiceConnect = ${data}.guildId;
+    window.sessionStorage.setItem('lasestGuildIdVoiceConnect', ${data}.guildId);
   }
 } else {
-  ${data}.guildId = (lasestGuildIdVoiceConnect === 0) ? null : lasestGuildIdVoiceConnect;
-  lasestGuildIdVoiceConnect = 0;
+  ${data}.guildId = (window.sessionStorage.getItem('lasestGuildIdVoiceConnect') == '0') ? null : window.sessionStorage.getItem('lasestGuildIdVoiceConnect');
+  window.sessionStorage.setItem('lasestGuildIdVoiceConnect', '0');
 }`
                         );
                     },
@@ -495,10 +505,18 @@ if (${data}.guildId) {
                             str +
                             `
 if (${closeCode} === 4013) {
-    showToast("Login Failure: Invalid intent(s), Logout...", 2);
+    Vencord.Webpack.Common.Toasts.show({
+		message: "Login Failure: Invalid intent(s), Logout...",
+		id: (Math.random() || Math.random()).toString(36).slice(2),
+		type: 2,
+	});
     ${closeCode} = 4004;
 } else if (${closeCode} === 4014) {
-    showToast("Login Failure: Disallowed intent(s), Logout...", 2);
+    Vencord.Webpack.Common.Toasts.show({
+		message: "Login Failure: Disallowed intent(s), Logout...",
+		id: (Math.random() || Math.random()).toString(36).slice(2),
+		type: 2,
+	});
     ${closeCode} = 4004;
 }`
                         );
@@ -519,7 +537,7 @@ if ("MESSAGE_CREATE" === ${eventName} && !${data}.guild_id && !Vencord.Webpack.f
         url: '/channels/' + ${data}.channel_id,
     }).then((d) => d.body).then(channel => {
         this.dispatcher.receiveDispatch(channel, "CHANNEL_CREATE", ${N});
-        if ($self.settings.store.saveDirectMessage) electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
+        if ($self.settings.store.saveDirectMessage) BotClientNative.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
     }).catch((err) => {
         const channel = {
             type: 1,
@@ -532,7 +550,7 @@ if ("MESSAGE_CREATE" === ${eventName} && !${data}.guild_id && !Vencord.Webpack.f
             flags: 0
         };
         this.dispatcher.receiveDispatch(channel, "CHANNEL_CREATE", ${N});
-        if ($self.settings.store.saveDirectMessage) electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
+        if ($self.settings.store.saveDirectMessage) BotClientNative.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
     }).finally((i) => {
         $self.console.log("[Client > Electron] Add Private channel (From MESSAGE_CREATE event)");
         return this.dispatcher.receiveDispatch(${data}, ${eventName}, ${N});
@@ -561,11 +579,21 @@ if ("READY_SUPPLEMENTAL" === ${eventName}) {
 }
 if ("READY" === ${eventName}) {
 $self.console.log("[Client]: Ready event", ${data});
+// Experiments
+const experiments = Object.entries(Vencord.Webpack.findByProps('getGuildExperimentBucket').getRegisteredExperiments())
+    .map(([id, data]) => ({ id, ...data }))
+    .sort((a, b) => {
+        const titleA = a.title.toLowerCase();
+        const titleB = b.title.toLowerCase();
+        return titleA < titleB ? -1 : titleA > titleB ? 1 : 0;
+    })
+    .filter(exp => exp.type === "user");
+const dms = BotClientNative.getPrivateChannelLogin(${data}.user.id, $self.settings.store.saveDirectMessage);
 ${data}.users = [
 	...(${data}.users || []),
-	...electron.getPrivateChannelLogin(${data}.user.id, $self.settings.store.saveDirectMessage).map(c => c.recipients[0]),
+	...dms.map(c => c.recipients[0]),
 ];
-${data}.user_settings_proto = electron.getSettingProto1(${data}.user.id);
+${data}.user_settings_proto = BotClientNative.getSettingProto1(${data}.user.id);
 ${data}.user_guild_settings = {
 	entries: [],
 	version: 0,
@@ -586,11 +614,11 @@ ${data}.read_state = {
 	partial: false,
 	entries: [],
 };
-${data}.private_channels = electron.getPrivateChannelLogin(${data}.user.id, $self.settings.store.saveDirectMessage);
+${data}.private_channels = dms;
 ${data}.guild_join_requests = [];
-${data}.guild_experiments = electron.getGuildExperiments();
+${data}.guild_experiments = BotClientNative.getGuildExperiments();
 ${data}.friend_suggestion_count = 0;
-${data}.experiments = electron.getUserExperiments();
+${data}.experiments = BotClientNative.getUserExperiments(experiments, ${data}.user.id);
 ${data}.connected_accounts = [];
 ${data}.auth_session_id_hash = "VjFaa2MyTnRTalZOVjNCb1VqQmFNVlJHWkVkalFUMDk=";
 ${data}.analytics_token = null;
@@ -617,26 +645,48 @@ window.getApplicationEmojis();
                             str +
                             `
 ${varToken} = ${varToken}.replace(/bot/gi,"").trim();
-const botInfo = await electron.getBotInfo(${varToken});
+const botInfo = await BotClientNative.getBotInfo(${varToken});
 this.token = ${varToken};
 $self.console.log("[Electron > Client] Discord Bot metadata", botInfo);
 if (!botInfo.success) {
-	showToast("Login Failure: " + botInfo.message, 2);
+    Vencord.Webpack.Common.Toasts.show({
+		message: "Login Failure: " + botInfo.message,
+		id: (Math.random() || Math.random()).toString(36).slice(2),
+		type: 2,
+	});
 	return this._handleClose(!0, 4004, botInfo.message);
 }
-const intentsData = electron.requestIntents(botInfo.data.flags);
-if (!intentsData.success) {
-	showToast("Login Failure: " + intentsData.message, 2);
-	return this._handleClose(!0, 4004, intentsData.message);
+let intents = botInfo.intents;
+window.sessionStorage.setItem('allShards', botInfo.allShards);
+// session storage init
+if (window.sessionStorage.getItem('currentShard') == null || parseInt(window.sessionStorage.getItem('currentShard')) + 1 > botInfo.allShards) {
+    window.sessionStorage.setItem('currentShard', 0);
 }
-const intents = getIntents(...intentsData.skip);
-allShards = Math.ceil(parseInt(botInfo.data.approximate_guild_count) / 100) || 1;
-if (currentShard + 1 > allShards) {
-    currentShard = 0;
-}
-$self.console.log("[Client > Electron] Bot Intents: ", intents, "Shard ID: ", currentShard, "(All: ", allShards, ")");
-showToast('Bot Intents: ' + intents, 1);
-showToast(\`Shard ID: \${currentShard} (All: \${allShards})\`, 1);
+window.sessionStorage.setItem('lasestGuildIdVoiceConnect', '0');
+// init custom function
+window.getApplicationEmojis = function () {
+	return new Promise((resolve) => {
+		Vencord.Webpack.Common.RestAPI.get({
+			url: '/users/@me/emojis',
+		})
+			.then((d) => {
+				window.applicationEmojis = d.body;
+				resolve(d.body);
+			})
+			.catch(() => resolve([]));
+	});
+};
+$self.console.log("[Client > Electron] Bot Intents: ", intents, "Shard ID: ", parseInt(window.sessionStorage.getItem('currentShard')), "(All: ", botInfo.allShards, ")");
+Vencord.Webpack.Common.Toasts.show({
+	message: 'Bot Intents: ' + intents,
+	id: (Math.random() || Math.random()).toString(36).slice(2),
+	type: 1,
+});
+Vencord.Webpack.Common.Toasts.show({
+	message: \`Shard ID: \${parseInt(window.sessionStorage.getItem('currentShard'))} (All: \${botInfo.allShards})\`,
+	id: (Math.random() || Math.random()).toString(36).slice(2),
+	type: 1,
+});
                         `
                         );
                     },
@@ -645,7 +695,7 @@ showToast(\`Shard ID: \${currentShard} (All: \${allShards})\`, 1);
                 {
                     match: /(token:\w+)(,capabilities:)/,
                     replace: function (str, ...args) {
-                        return `${args[0]},intents,shard: [parseInt(currentShard), allShards]${args[1]}`;
+                        return `${args[0]},intents,shard: [parseInt(window.sessionStorage.getItem('currentShard')) || 0, parseInt(window.sessionStorage.getItem('allShards'))]${args[1]}`;
                     },
                 },
             ],
@@ -722,29 +772,41 @@ return t ? \`Bot \${t.replace(/bot/gi,"").trim()}\` : null`;
                     match: /,acceptInvite\((\w+)\){/,
                     replace: (str, ...args) => {
                         return `${str}
-if (allShards > 1) {
+if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
     return new Promise(async (resolve, reject) => {
         const invite = await this.resolveInvite(${args[0]}.inviteKey);
         const guildId = invite.invite.guild_id;
         const channelId = invite.invite.channel.id;
         if (!guildId) {
-            showToast('Discord Bot Client cannot join guilds',2);
+        Vencord.Webpack.Common.Toasts.show({
+        	message: 'Discord Bot Client cannot join guilds',
+        	id: (Math.random() || Math.random()).toString(36).slice(2),
+        	type: 2,
+        });
             reject("Discord Bot Client cannot join guilds");
         } else {
             const res = await Vencord.Webpack.Common.RestAPI.get({url:"/guilds/"+guildId}).catch(e => e);
             if (res.ok) {
-                const shardId = Number((BigInt(guildId) >> 22n) % BigInt(allShards));
-                window.currentShard = shardId;
+                const shardId = Number((BigInt(guildId) >> 22n) % BigInt(parseInt(window.sessionStorage.getItem('allShards'))));
+                window.sessionStorage.setItem('currentShard', shardId);
                 await Vencord.Webpack.findByProps("loginToken").loginToken(Vencord.Webpack.findByProps("getToken").getToken());
                 resolve(Vencord.Webpack.Common.NavigationRouter.transitionToGuild(guildId, channelId));
             } else {
-                showToast('Discord Bot Client cannot join guilds',2);
+        Vencord.Webpack.Common.Toasts.show({
+        	message: 'Discord Bot Client cannot join guilds',
+        	id: (Math.random() || Math.random()).toString(36).slice(2),
+        	type: 2,
+        });
                 reject("Discord Bot Client cannot join guilds");
             }
         }
     });
 } else {
-    showToast('Discord Bot Client cannot join guilds',2);
+        Vencord.Webpack.Common.Toasts.show({
+        	message: 'Discord Bot Client cannot join guilds',
+        	id: (Math.random() || Math.random()).toString(36).slice(2),
+        	type: 2,
+        });
     return Promise.reject("Discord Bot Client cannot join guilds");
 }
 `;
@@ -780,14 +842,16 @@ if (allShards > 1) {
                 },
             ],
         },
-        // Max att size (25MB = 26214400)
+        // Max att size 25MB = 26214400 / 10MB = 10485760
+        // I hate discord for this
+        // https://discord.com/developers/docs/change-log#default-file-upload-limit-change
         {
             find: "BLOCKED_PAYMENT=",
             replacement: [
                 {
                     match: /(\d):{fileSize:\w+}/g,
                     replace:
-                        "$1:{fileSize:26214400}",
+                        "$1:{fileSize:(Date.now() > 1736985600000 ? 10485760 : 26214400)}",
                 },
             ],
         },
@@ -821,19 +885,24 @@ if (allShards > 1) {
                 },
             ]
         },
-        // AuthBox
+        // Discord is weird
+        // AuthBox (Token)
         {
-            find: "Messages.AUTH_LOGIN_BODY",
-            replacement: {
-                match: /(?<=renderDefaultForm\(e\)\{.+\.marginTop20,)(children:\[)/,
-                replace: function (str, ...args) {
-                    return "children:[$self.renderTokenLogin()],children_:[";
+            // ???
+            find: "}get canShowChooseAccount(){return this.props.hasLoggedInAccounts}loginOrSSO(",
+            replacement: [
+                {
+                    match: /(?<=renderDefaultForm\(\w+\)\{.+\.marginTop20,)(children:\[)/,
+                    replace: function (str, ...args) {
+                        return "children:[$self.renderTokenLogin()],children_:[";
+                    },
                 },
-            }
+            ]
         },
-        // AuthBox2
+        // AuthBox2 (Switch Account)
         {
-            find: "Messages.MULTI_ACCOUNT_LOGIN_TITLE",
+            // ???
+            find: `componentWillUnmount(){window.removeEventListener("keydown",this.handleTabOrEnter)}hasError(`,
             replacement: [
                 {
                     match: /(?<=renderDefaultForm\(\)\{.+\.loginForm,)(children:\[)/,
@@ -859,18 +928,22 @@ if (allShards > 1) {
                         return `async openPrivateChannel(e){
                         // Check Bot account
                         if (Vencord.Webpack.Common.UserStore.getUser(arguments[0])?.bot) {
-                            showToast("Cannot send messages to this user (User.bot = True)", 2);
+                            Vencord.Webpack.Common.Toasts.show({
+        	                    message: "Cannot send messages to this user (User.bot = True)",
+        	                    id: (Math.random() || Math.random()).toString(36).slice(2),
+        	                    type: 2,
+                            });
                             return;
                         }
                         const result = await this.openPrivateChannel_.apply(this, arguments);
-                        if ($self.settings.store.saveDirectMessage) electron.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0], result);
+                        if ($self.settings.store.saveDirectMessage) BotClientNative.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0], result);
                         },${first}_${second}`;
                     }
                 },
                 {
                     match: /closePrivateChannel\(\w+\){/,
                     replace: function (str) {
-                        return `${str}if ($self.settings.store.saveDirectMessage) electron.handleClosePrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0]);`;
+                        return `${str}if ($self.settings.store.saveDirectMessage) BotClientNative.handleClosePrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, arguments[0]);`;
                     }
                 }
             ]
@@ -911,10 +984,26 @@ if (allShards > 1) {
             replacement: [
                 {
                     match: /;return{unlocked:this\.getSearchResultsOrder\((\w+)\.unlocked/,
-                    replace: ';$1.unlocked = [...$1.unlocked, ...window.applicationEmojis.filter(o => o.name?.toLowerCase().includes(arguments[0].query?.toLowerCase()))];return{unlocked:this.getSearchResultsOrder($1.unlocked'
+                    replace: ';window.getApplicationEmojis();$1.unlocked = [...$1.unlocked, ...(window.applicationEmojis || []).filter(o => o.name?.toLowerCase().includes(arguments[0].query?.toLowerCase()))];return{unlocked:this.getSearchResultsOrder($1.unlocked'
                 },
             ],
         },
+        // Vesktop
+        {
+            find: ".wordmarkWindows",
+            replacement: [
+                {
+                    // TODO: Fix eslint rule
+                    // eslint-disable-next-line no-useless-escape
+                    match: /case \i\.\i\.WINDOWS:/,
+                    replace: 'case "WEB":'
+                },
+                ...["close", "minimize", "maximize"].map(op => ({
+                    match: new RegExp(String.raw`\i\.\i\.${op}\b`),
+                    replace: `BotClientNative.${op}`
+                }))
+            ]
+        }
     ],
     commands: [
         {
@@ -985,15 +1074,15 @@ if (allShards > 1) {
             ],
             execute: async (opts, ctx) => {
                 const id = findOption<number>(opts, "id", 0);
-                if (id < 0 || id + 1 > window.allShards) {
+                if (id < 0 || id + 1 > parseInt(window.sessionStorage.getItem('allShards') as string)) {
                     sendBotMessage(ctx.channel.id, {
-                        content: 
-`### Invalid shardId
-🚫 Must be greater than or equal to **0** and less than or equal to **${window.allShards - 1}**.
+                        content:
+                            `### Invalid shardId
+🚫 Must be greater than or equal to **0** and less than or equal to **${parseInt(window.sessionStorage.getItem('allShards') as string) - 1}**.
 **${id}** is an invalid number`,
                     });
                 } else {
-                    window.currentShard = id;
+                    window.sessionStorage.setItem('currentShard', id as any);
                     LoginToken.loginToken(GetToken.getToken());
                 }
             },
@@ -1012,7 +1101,7 @@ if (allShards > 1) {
             ],
             execute: async (opts, ctx) => {
                 const guild = findOption<string>(opts, "id", "");
-                if (window.allShards === 1) {
+                if (parseInt(window.sessionStorage.getItem('allShards') as string) === 1) {
                     return sendBotMessage(ctx.channel.id, {
                         content: "🚫 Cannot switch guild in single shard",
                     });
@@ -1022,8 +1111,8 @@ if (allShards > 1) {
                         content: "🚫 Invalid guild ID",
                     });
                 }
-                const shardId = Number((BigInt(guild) >> 22n) % BigInt(window.allShards));
-                window.currentShard = shardId;
+                const shardId = Number((BigInt(guild) >> 22n) % BigInt(parseInt(window.sessionStorage.getItem('allShards') as string)));
+                window.sessionStorage.setItem('currentShard', shardId as any);
                 LoginToken.loginToken(GetToken.getToken());
             },
         }
@@ -1045,10 +1134,7 @@ if (allShards > 1) {
         ].forEach(
             a =>
             (findByProps("fetchRelationships")[a] = function () {
-                window.showToast(
-                    "Discord Bot Client cannot use Relationships Module",
-                    2
-                );
+                showToast("Discord Bot Client cannot use Relationships Module", Toasts.Type.FAILURE);
                 return Promise.reject(
                     "Discord Bot Client cannot use Relationships Module"
                 );
@@ -1370,13 +1456,13 @@ if (allShards > 1) {
                 memberCount: memberCount,
                 type: "GUILD_MEMBER_LIST_UPDATE",
             });
-/*
-            BotClientLogger.info(
-                "Update MemberList: Interval",
-                this.settings.store.memberListInterval * 1000,
-                "ms",
-            );
-*/
+            /*
+                        BotClientLogger.info(
+                            "Update MemberList: Interval",
+                            this.settings.store.memberListInterval * 1000,
+                            "ms",
+                        );
+            */
         };
 
         if (this.settings.store.memberListInterval) {
@@ -1402,11 +1488,11 @@ if (allShards > 1) {
         const state = (window.document.getElementsByClassName(`${inputModule.inputDefault} token_multi`)[0] as any)?.value;
         if (!state) return;
         if (!/(mfa\.[a-z0-9_-]{20,})|([a-z0-9_-]{23,28}\.[a-z0-9_-]{6,7}\.[a-z0-9_-]{27})/i.test((state || "").trim())) {
-            window.showToast("Login Failure: Invalid token", 2);
+            showToast("Login Failure: Invalid token", Toasts.Type.FAILURE);
             BotClientLogger.error("Login Failure: Invalid token", state);
             return;
         } else {
-            window.currentShard = 0;
+            window.sessionStorage.setItem('currentShard', '0');
             LoginToken.loginToken(state);
         }
     },

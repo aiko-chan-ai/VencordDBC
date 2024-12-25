@@ -218,7 +218,7 @@ export default definePlugin({
     },
 
     get botClientVersion() {
-        return window.electron?.getBotClientVersion();
+        return window.BotClientNative?.getBotClientVersion() || "^3.6.0";
     },
 
     get additionalInfo() {
