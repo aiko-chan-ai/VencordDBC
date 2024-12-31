@@ -988,6 +988,19 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
                 },
             ],
         },
+        {
+            find: "https://cdn.discordapp.com/assets/quests/",
+            replacement: [
+                {
+                    match: '"https://cdn.discordapp.com/assets/quests/"',
+                    replace: 'GLOBAL_ENV.MIGRATION_DESTINATION_ORIGIN + "/cdn/assets/quests/"',
+                },
+                {
+                    match: '"https://cdn.discordapp.com/quests/"',
+                    replace: 'GLOBAL_ENV.MIGRATION_DESTINATION_ORIGIN + "/cdn/quests/"',
+                },
+            ]
+        },
         // Vesktop
         {
             find: ".wordmarkWindows",
