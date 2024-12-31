@@ -988,6 +988,7 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
                 },
             ],
         },
+        /*
         {
             find: "https://cdn.discordapp.com/assets/quests/",
             replacement: [
@@ -1001,6 +1002,7 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
                 },
             ]
         },
+        */
         // Vesktop
         {
             find: ".wordmarkWindows",
