@@ -1348,9 +1348,16 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
             }
         });
 
+        /*
         FluxDispatcher.subscribe("CHANNEL_SELECT", (data) => {
             // BotClientLogger.debug("CHANNEL_SELECT", data);
             funcUpdateGuildMembersList("NavigationRouter.transitionToChannel", data);
+        });
+        */
+
+        FluxDispatcher.subscribe("CHANNEL_PRELOAD", (data) => {
+            // BotClientLogger.debug("CHANNEL_PRELOAD", data);
+            funcUpdateGuildMembersList("ChannelPreload", data);
         });
 
         FluxDispatcher.subscribe("GUILD_ROLE_UPDATE", (data) => {
@@ -1480,9 +1487,16 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
         };
     },
     updateGuildMembersList(location: string = "unknown", anyLog?: any) {
-        if (!this.settings.store.showMemberList) return false;
+        if (!this.settings.store.showMemberList) {
+            return false;
+        }
         const guild = getCurrentGuild();
-        if (!guild) return false;
+        if (!guild) {
+            BotClientLogger.error(
+                'botClient#updateGuildMembersList()', "Invalid Guild",
+            );
+            return false;
+        }
         const channel = getCurrentChannel();
         if (
             !channel ||
@@ -1495,7 +1509,7 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
             channel.isDirectory()
         ) {
             BotClientLogger.error(
-                "Update MemberList: Invalid Channel",
+                'botClient#updateGuildMembersList()', "Invalid Channel",
                 channel
             );
             return false;
@@ -1558,9 +1572,10 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
         });
 
         BotClientLogger.info(
-            `Update MemberList: Emitted from ${location}`,
+            'botClient#updateGuildMembersList()',
+            `Emitted by: ${location}`,
             anyLog,
-            "FluxDispatcher.dispatch",
+            "FluxDispatcher.dispatch:",
             {
                 guildId: guild.id,
                 id: memberListId,
