@@ -61,7 +61,7 @@ import {
     useState,
 } from "@webpack/common";
 
-import { Channel, Guild, Message, User } from "discord-types/general";
+import { Channel, Guild, GuildMember, Message, Role, User } from "discord-types/general";
 
 import EmbedEditorModal from "./components/EmbedEditor";
 import { iconSvg } from "./icon.svg";
@@ -157,6 +157,28 @@ const getAttachments = (channelId: string): {
 
 // Voice Message plugin
 const PendingReplyStore = findStoreLazy("PendingReplyStore");
+
+// Type & Interface
+type Group = {
+    id: string;
+    count: number;
+};
+type Ops = {
+    group: Group;
+} | {
+    member: MemberPatch;
+};
+type List = {
+    group: Group;
+    members: MemberPatch[];
+};
+interface MemberPatch extends GuildMember {
+    user: {
+        id: string;
+    };
+    status: string;
+    position: number;
+}
 
 class SnowflakeUtil extends null {
     static generate(timestamp: Date | number = Date.now()) {
@@ -301,13 +323,6 @@ export default definePlugin({
             description: "Allow fetching member list sidebar",
             type: OptionType.BOOLEAN,
             default: true,
-            restartNeeded: false,
-        },
-        memberListInterval: {
-            description:
-                "The amount of time the member list sidebar is refreshed (seconds)",
-            type: OptionType.NUMBER,
-            default: 2,
             restartNeeded: false,
         },
         embedChatButton: {
@@ -1291,178 +1306,254 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
             removeButton("EmbedEditor");
         }
 
-        function calculateMemberListId(
-            channel: Channel,
-            everyonePermHasViewChannel
-        ) {
-            let list_id = "everyone";
-            const perms: string[] = [];
-            let isDeny = false;
-            Object.values(channel.permissionOverwrites).map(overwrite => {
-                const { id, allow, deny } = overwrite;
-                if (allow & PermissionsBits.VIEW_CHANNEL)
-                    perms.push(`allow:${id}`);
-                else if (deny & PermissionsBits.VIEW_CHANNEL) {
-                    perms.push(`deny:${id}`);
-                    isDeny = true;
-                }
-            });
-            if (isDeny) {
-                list_id = murmurhash.v3(perms.sort().join(",")).toString();
-            } else if (!everyonePermHasViewChannel) {
-                list_id = murmurhash.v3(perms.sort().join(",")).toString();
+
+        const funcUpdateGuildMembersList = this.throttle(this.updateGuildMembersList.bind(this), 5000);
+
+        FluxDispatcher.subscribe("GUILD_MEMBER_UPDATE", (data) => {
+            // BotClientLogger.debug("GUILD_MEMBER_UPDATE", data);
+            const guildId = getCurrentChannel()?.guild_id;
+            if (data.guildId === guildId) {
+                funcUpdateGuildMembersList("GuildMemberUpdate", data);
             }
-            return list_id;
+        });
+
+        FluxDispatcher.subscribe("GUILD_MEMBER_ADD", (data) => {
+            // BotClientLogger.debug("GUILD_MEMBER_ADD", data);
+            const guildId = getCurrentChannel()?.guild_id;
+            if (data.guildId === guildId) {
+                funcUpdateGuildMembersList("GuildMemberAdd", data);
+            }
+        });
+
+        FluxDispatcher.subscribe("GUILD_MEMBER_REMOVE", (data) => {
+            // BotClientLogger.debug("GUILD_MEMBER_REMOVE", data);
+            const guildId = getCurrentChannel()?.guild_id;
+            if (data.guildId === guildId) {
+                funcUpdateGuildMembersList("GuildMemberRemove", data);
+            }
+        });
+
+        FluxDispatcher.subscribe("PRESENCE_UPDATES", (data) => {
+            // BotClientLogger.debug("PRESENCE_UPDATES", data);
+            const guildId = getCurrentChannel()?.guild_id;
+            if ((data.updates as any[]).find(u => u.guildId === guildId)) {
+                funcUpdateGuildMembersList("PresenceUpdates", data);
+            }
+        });
+
+        FluxDispatcher.subscribe("CHANNEL_SELECT", (data) => {
+            // BotClientLogger.debug("CHANNEL_SELECT", data);
+            funcUpdateGuildMembersList("NavigationRouter.transitionToChannel", data);
+        });
+
+        FluxDispatcher.subscribe("GUILD_ROLE_UPDATE", (data) => {
+            // BotClientLogger.debug("GUILD_ROLE_UPDATE", data);
+            const guildId = getCurrentChannel()?.guild_id;
+            if (data.guildId === guildId) {
+                funcUpdateGuildMembersList("GuildRoleUpdate", data);
+            }
+        });
+
+        FluxDispatcher.subscribe("GUILD_ROLE_CREATE", (data) => {
+            // BotClientLogger.debug("GUILD_ROLE_CREATE", data);
+            const guildId = getCurrentChannel()?.guild_id;
+            if (data.guildId === guildId) {
+                funcUpdateGuildMembersList("GuildRoleCreate", data);
+            }
+        });
+
+        FluxDispatcher.subscribe("GUILD_ROLE_DELETE", (data) => {
+            // BotClientLogger.debug("GUILD_ROLE_DELETE", data);
+            const guildId = getCurrentChannel()?.guild_id;
+            if (data.guildId === guildId) {
+                funcUpdateGuildMembersList("GuildRoleDelete", data);
+            }
+        });
+    },
+    // Utils
+    throttle<T extends (...args: any[]) => void>(func: T, delay: number): (...args: Parameters<T>) => void {
+        let lastCall = 0;
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        return (...args: Parameters<T>) => {
+            const now = new Date().getTime();
+            if (now - lastCall >= delay) {
+                func(...args);
+                lastCall = now;
+            } else {
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+                timeoutId = setTimeout(() => {
+                    func(...args);
+                    lastCall = new Date().getTime();
+                }, delay - (now - lastCall));
+            }
+        };
+    },
+    // Guild Member List
+    calculateMemberListId(
+        channel: Channel,
+        everyonePermHasViewChannel
+    ) {
+        let list_id = "everyone";
+        const perms: string[] = [];
+        let isDeny = false;
+        Object.values(channel.permissionOverwrites).map(overwrite => {
+            const { id, allow, deny } = overwrite;
+            if (allow & PermissionsBits.VIEW_CHANNEL)
+                perms.push(`allow:${id}`);
+            else if (deny & PermissionsBits.VIEW_CHANNEL) {
+                perms.push(`deny:${id}`);
+                isDeny = true;
+            }
+        });
+        if (isDeny) {
+            list_id = murmurhash.v3(perms.sort().join(",")).toString();
+        } else if (!everyonePermHasViewChannel) {
+            list_id = murmurhash.v3(perms.sort().join(",")).toString();
         }
-
-        // Group
-        function makeGroup(onlineMembers, offlineMembers, guildRoles) {
-            type Group = {
-                id: string;
-                count: number;
-            };
-            const ops: (
-                | {
-                    group: Group;
-                }
-                | {
-                    member: any;
-                }
-            )[] = [];
-            const group: Group[] = [];
-            type List = {
-                group: Group;
-                members: any[];
-            };
-            const allList = new Map<string, List>();
-            // Online members
-            for (const member of onlineMembers) {
-                const idList = member.hoistRoleId || "online";
-                const list =
-                    allList.get(idList) ||
-                    ({
-                        group: {
-                            id: idList,
-                            count: 0,
-                        },
-                        members: [],
-                    } as List);
-                list.group.count++;
-                list.members.push(member);
-                allList.set(idList, list);
-            }
-            // Sorting online members
-            for (const list of Array.from(
-                allList,
-                ([name, value]) => value
-            ).sort(
-                (a, b) =>
-                    (guildRoles[b.group.id]?.position || 0) -
-                    (guildRoles[a.group.id]?.position || 0)
-            )) {
-                ops.push({
-                    group: list.group,
-                });
-                list.members
-                    .sort((x, y) => (x.nick || "").localeCompare(y.nick || ""))
-                    .map(m => ops.push({ member: m }));
-                group.push(list.group);
-            }
-            // Offline members
-            if (offlineMembers.length > 0) {
-                const list = {
-                    group: {
-                        id: "offline",
-                        count: offlineMembers.length,
-                    },
-                    members: offlineMembers,
-                } as List;
-                ops.push({
-                    group: list.group,
-                });
-                list.members.map(m => ops.push({ member: m }));
-                group.push(list.group);
-            }
-            return {
-                ops,
-                group,
-            };
-        }
-
-        const doRefreshMemberList = () => {
-            if (this.settings.store.memberListInterval < 1) {
-                this.settings.store.memberListInterval = 1;
-            }
-            setTimeout(() => {
-                doRefreshMemberList();
-            }, this.settings.store.memberListInterval * 1000);
-            if (!this.settings.store.showMemberList) return;
-            const guild = getCurrentGuild();
-            if (!guild) return;
-            const channel = getCurrentChannel();
-            if (
-                !channel ||
-                !channel.guild_id ||
-                channel.isDM() ||
-                channel.isGroupDM() ||
-                channel.isMultiUserDM() ||
-                channel.isGuildVoice() ||
-                channel.isGuildStageVoice() ||
-                channel.isDirectory()
-            ) {
-                BotClientLogger.error(
-                    "Update MemberList: Invalid Channel",
-                    channel
-                );
-                return false;
-            }
-            const guildRoles = GuildStore.getRoles(guild.id);
-            // MemberListId
-            const memberListId = calculateMemberListId(
-                channel,
-                guildRoles[guild.id].permissions & PermissionsBits.VIEW_CHANNEL
-            );
-            // GuildMembers Patch
-            const allMembers = GuildMemberStore.getMembers(guild.id);
-            const memberCount = allMembers.length;
-            const membersOffline: any[] = [];
-            const membersOnline: any[] = [];
-            allMembers.map(m => {
-                if (
-                    computePermissions({
-                        user: { id: m.userId },
-                        context: guild,
-                        overwrites: channel.permissionOverwrites,
-                    }) & PermissionsBits.VIEW_CHANNEL
-                ) {
-                    const status = PresenceStore.getStatus(m.userId);
-                    const member = {
-                        ...m,
-                        user: {
-                            id: m.userId,
-                        },
-                        status: status !== "invisible" ? status : "offline",
-                        position: guildRoles[m.hoistRoleId]?.position || 0,
-                    };
-                    if (member.status === "offline" && memberCount <= 1000) {
-                        membersOffline.push(member);
-                    } else if (member.status !== "offline") {
-                        membersOnline.push(member);
-                    }
-                }
-            });
-
-            const groups = makeGroup(membersOnline, membersOffline, guildRoles);
-
-            const ops = [
+        return list_id;
+    },
+    makeGroup(onlineMembers: MemberPatch[], offlineMembers: MemberPatch[], guildRoles: Record<string, Role>) {
+        const ops: Ops[] = [];
+        const group: Group[] = [];
+        const allList = new Map<string, List>();
+        // Online members
+        for (const member of onlineMembers) {
+            const idList = member.hoistRoleId || "online";
+            const list =
+                allList.get(idList) ||
                 {
-                    items: groups.ops,
-                    op: "SYNC",
-                    range: [0, 99],
+                    group: {
+                        id: idList,
+                        count: 0,
+                    },
+                    members: [],
+                };
+            list.group.count++;
+            list.members.push(member);
+            allList.set(idList, list);
+        }
+        // Sorting online members
+        for (const list of Array.from(
+            allList,
+            ([name, value]) => value
+        ).sort(
+            (a, b) =>
+                (guildRoles[b.group.id]?.position || 0) -
+                (guildRoles[a.group.id]?.position || 0)
+        )) {
+            ops.push({
+                group: list.group,
+            });
+            list.members
+                .sort((x, y) => (x.nick || "").localeCompare(y.nick || ""))
+                .map(m => ops.push({ member: m }));
+            group.push(list.group);
+        }
+        // Offline members
+        if (offlineMembers.length > 0) {
+            const list = {
+                group: {
+                    id: "offline",
+                    count: offlineMembers.length,
                 },
-            ];
+                members: offlineMembers,
+            };
+            ops.push({
+                group: list.group,
+            });
+            list.members.map(m => ops.push({ member: m }));
+            group.push(list.group);
+        }
+        return {
+            ops,
+            group,
+        };
+    },
+    updateGuildMembersList(location: string = "unknown", anyLog?: any) {
+        if (!this.settings.store.showMemberList) return false;
+        const guild = getCurrentGuild();
+        if (!guild) return false;
+        const channel = getCurrentChannel();
+        if (
+            !channel ||
+            !channel.guild_id ||
+            channel.isDM() ||
+            channel.isGroupDM() ||
+            channel.isMultiUserDM() ||
+            channel.isGuildVoice() ||
+            channel.isGuildStageVoice() ||
+            channel.isDirectory()
+        ) {
+            BotClientLogger.error(
+                "Update MemberList: Invalid Channel",
+                channel
+            );
+            return false;
+        }
+        const guildRoles = GuildStore.getRoles(guild.id);
+        // MemberListId
+        const memberListId = this.calculateMemberListId(
+            channel,
+            guildRoles[guild.id].permissions & PermissionsBits.VIEW_CHANNEL
+        );
+        // GuildMembers Patch
+        const allMembers = GuildMemberStore.getMembers(guild.id);
+        const memberCount = allMembers.length;
+        const membersOffline: MemberPatch[] = [];
+        const membersOnline: MemberPatch[] = [];
 
-            FluxDispatcher.dispatch({
+        allMembers.map(m => {
+            if (
+                computePermissions({
+                    user: { id: m.userId },
+                    context: guild,
+                    overwrites: channel.permissionOverwrites,
+                }) & PermissionsBits.VIEW_CHANNEL
+            ) {
+                const status = PresenceStore.getStatus(m.userId);
+                const member = {
+                    ...m,
+                    user: {
+                        id: m.userId,
+                    },
+                    status: status !== "invisible" ? status : "offline",
+                    position: guildRoles[m.hoistRoleId]?.position || 0,
+                };
+                if (member.status === "offline" && memberCount <= 1000) {
+                    membersOffline.push(member);
+                } else if (member.status !== "offline") {
+                    membersOnline.push(member);
+                }
+            }
+        });
+
+        const groups = this.makeGroup(membersOnline, membersOffline, guildRoles);
+
+        const ops = [
+            {
+                items: groups.ops,
+                op: "SYNC",
+                range: [0, 99],
+            },
+        ];
+
+        FluxDispatcher.dispatch({
+            guildId: guild.id,
+            id: memberListId,
+            ops,
+            groups: groups.group,
+            onlineCount: membersOnline.length,
+            memberCount: memberCount,
+            type: "GUILD_MEMBER_LIST_UPDATE",
+        });
+
+        BotClientLogger.info(
+            `Update MemberList: Emitted from ${location}`,
+            anyLog,
+            "FluxDispatcher.dispatch",
+            {
                 guildId: guild.id,
                 id: memberListId,
                 ops,
@@ -1470,22 +1561,12 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
                 onlineCount: membersOnline.length,
                 memberCount: memberCount,
                 type: "GUILD_MEMBER_LIST_UPDATE",
-            });
-            /*
-                        BotClientLogger.info(
-                            "Update MemberList: Interval",
-                            this.settings.store.memberListInterval * 1000,
-                            "ms",
-                        );
-            */
-        };
+            }
+        );
 
-        if (this.settings.store.memberListInterval) {
-            setTimeout(() => {
-                doRefreshMemberList();
-            }, this.settings.store.memberListInterval * 1000);
-        }
+        return true;
     },
+    // React Component Login
     renderTokenLogin() {
         return (
             <RenderTokenLogin>
@@ -1511,6 +1592,7 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
             LoginToken.loginToken(state);
         }
     },
+    // Debug
     get console() {
         return BotClientLogger;
     }
