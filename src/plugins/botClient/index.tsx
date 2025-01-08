@@ -325,6 +325,13 @@ export default definePlugin({
             default: true,
             restartNeeded: false,
         },
+        memberListThrottleDelay: {
+            description:
+                "The interval at which the member list sidebar is updated (seconds)",
+            type: OptionType.NUMBER,
+            default: 2,
+            restartNeeded: false,
+        },
         embedChatButton: {
             description:
                 "Add a button to show the Embed Editor modal in the chat bar",
@@ -1307,7 +1314,7 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
         }
 
 
-        const funcUpdateGuildMembersList = this.throttle(this.updateGuildMembersList.bind(this), 5000);
+        const funcUpdateGuildMembersList = this.throttle(this.updateGuildMembersList.bind(this), this.settings.store.memberListThrottleDelay * 1000);
 
         FluxDispatcher.subscribe("GUILD_MEMBER_UPDATE", (data) => {
             // BotClientLogger.debug("GUILD_MEMBER_UPDATE", data);
@@ -1372,6 +1379,7 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
     },
     // Utils
     throttle<T extends (...args: any[]) => void>(func: T, delay: number): (...args: Parameters<T>) => void {
+        if (delay <= 0) delay = 2000;
         let lastCall = 0;
         let timeoutId: ReturnType<typeof setTimeout> | null = null;
         return (...args: Parameters<T>) => {
