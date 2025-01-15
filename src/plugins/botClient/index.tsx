@@ -49,12 +49,14 @@ import {
     GuildMemberStore,
     GuildStore,
     MessageActions,
+    NavigationRouter,
     PermissionsBits,
     PermissionStore,
     PresenceStore,
     React,
     RestAPI,
     SelectedChannelStore,
+    SelectedGuildStore,
     showToast,
     Toasts,
     UserStore,
@@ -76,11 +78,11 @@ const murmurhash = findByPropsLazy("v3", "v2");
 const BotClientLogger = new Logger("BotClient", "#ff88f3");
 
 // React Module
-const marginModule = findByPropsLazy("marginBottom8");
-const authBoxModule = findByPropsLazy("authBox");
-const titleModule = findByPropsLazy("h5");
+const marginModule = findByPropsLazy("marginBottom8", "marginTop20");
+const authBoxModule = findByPropsLazy("authBox", "authBoxExpanded");
+const titleModule = findByPropsLazy("h5", "errorMessage");
 const inputModule = findByPropsLazy("inputWrapper", "inputDefault", "inputMini");
-const inputError = findByPropsLazy("inputError");
+const inputError = findByPropsLazy("inputError", "hiddenMessage");
 
 const contentModule = findByPropsLazy("grow");
 
@@ -554,27 +556,20 @@ if (${closeCode} === 4013) {
                         return (
                             str +
                             `
-if ("MESSAGE_CREATE" === ${eventName} && !${data}.guild_id && !Vencord.Webpack.findByProps("getChannel", "getBasicChannel")?.getChannel(${data}.channel_id)) {
+if ("MESSAGE_CREATE" === ${eventName} && !${data}.guild_id && !Vencord.Webpack.Common.ChannelStore.getChannel(${data}.channel_id)) {
     return Vencord.Webpack.Common.RestAPI.get({
         url: '/channels/' + ${data}.channel_id,
     }).then((d) => d.body).then(channel => {
         this.dispatcher.receiveDispatch(channel, "CHANNEL_CREATE", ${N});
-        if ($self.settings.store.saveDirectMessage) BotClientNative.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
+        // https://discord.com/developers/docs/resources/channel#channel-object-channel-types
+        // 1 = DM
+        if ($self.settings.store.saveDirectMessage && channel.type === 1) {
+            BotClientNative.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
+            $self.console.log("[Client > Electron] Add Private channel (From MESSAGE_CREATE event)");
+        }
     }).catch((err) => {
-        const channel = {
-            type: 1,
-            recipients: [${data}.author ?? ${data}.user ?? {
-                id: ${data}.user_id
-            }],
-            last_message_id: ${data}.id,
-            is_spam: !1,
-            id: ${data}.channel_id,
-            flags: 0
-        };
-        this.dispatcher.receiveDispatch(channel, "CHANNEL_CREATE", ${N});
-        if ($self.settings.store.saveDirectMessage) BotClientNative.handleOpenPrivateChannel(Vencord.Webpack.Common.UserStore.getCurrentUser().id, channel.recipients[0].id, channel.id);
+        $self.console.log("[Client > Electron] Get from /channels/" + ${data}.channel_id + " error", err);
     }).finally((i) => {
-        $self.console.log("[Client > Electron] Add Private channel (From MESSAGE_CREATE event)");
         return this.dispatcher.receiveDispatch(${data}, ${eventName}, ${N});
     });
 }
@@ -1150,7 +1145,8 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
                 }
                 const shardId = Number((BigInt(guild) >> 22n) % BigInt(parseInt(window.sessionStorage.getItem('allShards') as string)));
                 window.sessionStorage.setItem('currentShard', shardId as any);
-                LoginToken.loginToken(GetToken.getToken());
+                await LoginToken.loginToken(GetToken.getToken());
+                NavigationRouter.transitionToGuild(guild);
             },
         }
     ],
@@ -1351,13 +1347,13 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
         /*
         FluxDispatcher.subscribe("CHANNEL_SELECT", (data) => {
             // BotClientLogger.debug("CHANNEL_SELECT", data);
-            funcUpdateGuildMembersList("NavigationRouter.transitionToChannel", data);
+            if (SelectedGuildStore.getGuildId()) funcUpdateGuildMembersListForChannelSelect("ChannelSelect", data);
         });
         */
 
         FluxDispatcher.subscribe("CHANNEL_PRELOAD", (data) => {
             // BotClientLogger.debug("CHANNEL_PRELOAD", data);
-            funcUpdateGuildMembersList("ChannelPreload", data);
+            this.updateGuildMembersList("ChannelPreload", data);
         });
 
         FluxDispatcher.subscribe("GUILD_ROLE_UPDATE", (data) => {
@@ -1490,14 +1486,14 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
         if (!this.settings.store.showMemberList) {
             return false;
         }
-        const guild = getCurrentGuild();
+        const guild = anyLog?.type === "CHANNEL_PRELOAD" ? GuildStore.getGuild(anyLog.guildId) : getCurrentGuild();
         if (!guild) {
             BotClientLogger.error(
                 'botClient#updateGuildMembersList()', "Invalid Guild",
             );
             return false;
         }
-        const channel = getCurrentChannel();
+        const channel = anyLog?.type === "CHANNEL_PRELOAD" ? ChannelStore.getChannel(anyLog.channelId) : getCurrentChannel();
         if (
             !channel ||
             !channel.guild_id ||
