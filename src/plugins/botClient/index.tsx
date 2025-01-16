@@ -1093,60 +1093,77 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
             },
         },
         {
-            name: "switchshard",
-            description: "Login with another shard ID",
+            name: "switch",
+            description: "Commands related to switch",
             inputType: ApplicationCommandInputType.BOT,
             options: [
                 {
-                    name: "id",
-                    description: "Shard ID",
-                    required: true,
-                    type: ApplicationCommandOptionType.INTEGER,
+                    name: "shard",
+                    description: "Login with another shard ID",
+                    type: ApplicationCommandOptionType.SUB_COMMAND,
+                    options: [
+                        {
+                            name: "id",
+                            description: "Shard ID",
+                            required: true,
+                            type: ApplicationCommandOptionType.INTEGER,
+                        },
+                    ],
+                },
+                {
+                    name: "guild",
+                    description: "Switch to a guild in another shard using its ID.",
+                    type: ApplicationCommandOptionType.SUB_COMMAND,
+                    options: [
+                        {
+                            name: "id",
+                            description: "Guild ID",
+                            required: true,
+                            type: ApplicationCommandOptionType.STRING,
+                        }
+                    ],
                 },
             ],
             execute: async (opts, ctx) => {
-                const id = findOption<number>(opts, "id", 0);
-                if (id < 0 || id + 1 > parseInt(window.sessionStorage.getItem('allShards') as string)) {
-                    sendBotMessage(ctx.channel.id, {
-                        content:
-                            `### Invalid shardId
-🚫 Must be greater than or equal to **0** and less than or equal to **${parseInt(window.sessionStorage.getItem('allShards') as string) - 1}**.
+                BotClientLogger.log(opts, ctx);
+                const subCommand = opts[0];
+                switch (subCommand.name) {
+                    case "shard": {
+                        const id = findOption<number>(subCommand.options, "id", 0);
+                        const allShards = parseInt(window.sessionStorage.getItem('allShards') as string);
+                        if (id < 0 || id + 1 > allShards) {
+                            sendBotMessage(ctx.channel.id, {
+                                content:
+                                    `### Invalid shardId
+🚫 Must be greater than or equal to **0** and less than or equal to **${allShards - 1}**.
 **${id}** is an invalid number`,
-                    });
-                } else {
-                    window.sessionStorage.setItem('currentShard', id as any);
-                    LoginToken.loginToken(GetToken.getToken());
+                            });
+                        } else {
+                            window.sessionStorage.setItem('currentShard', id as any);
+                            LoginToken.loginToken(GetToken.getToken());
+                        }
+                        break;
+                    }
+                    case "guild": {
+                        const guild = findOption<string>(subCommand.options, "id", "");
+                        const allShards = parseInt(window.sessionStorage.getItem('allShards') as string);
+                        if (!/^\d{17,19}$/.test(guild)) {
+                            return sendBotMessage(ctx.channel.id, {
+                                content: "🚫 Invalid guild ID",
+                            });
+                        }
+                        if (allShards === 1) {
+                            return sendBotMessage(ctx.channel.id, {
+                                content: "🚫 Cannot switch guild in single shard",
+                            });
+                        }
+                        const shardId = Number((BigInt(guild) >> 22n) % BigInt(allShards));
+                        window.sessionStorage.setItem('currentShard', shardId as any);
+                        await LoginToken.loginToken(GetToken.getToken());
+                        NavigationRouter.transitionToGuild(guild);
+                        break;
+                    }
                 }
-            },
-        },
-        {
-            name: "switchguild",
-            description: "You can switch to a guild in another shard using its ID.",
-            inputType: ApplicationCommandInputType.BOT,
-            options: [
-                {
-                    name: "id",
-                    description: "Guild ID",
-                    required: true,
-                    type: ApplicationCommandOptionType.STRING,
-                },
-            ],
-            execute: async (opts, ctx) => {
-                const guild = findOption<string>(opts, "id", "");
-                if (parseInt(window.sessionStorage.getItem('allShards') as string) === 1) {
-                    return sendBotMessage(ctx.channel.id, {
-                        content: "🚫 Cannot switch guild in single shard",
-                    });
-                }
-                if (!/^\d{17,19}$/.test(guild)) {
-                    return sendBotMessage(ctx.channel.id, {
-                        content: "🚫 Invalid guild ID",
-                    });
-                }
-                const shardId = Number((BigInt(guild) >> 22n) % BigInt(parseInt(window.sessionStorage.getItem('allShards') as string)));
-                window.sessionStorage.setItem('currentShard', shardId as any);
-                await LoginToken.loginToken(GetToken.getToken());
-                NavigationRouter.transitionToGuild(guild);
             },
         }
     ],
