@@ -1168,6 +1168,26 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
         }
     ],
     start() {
+        // Disable Stripe
+        Object.defineProperty(window, "Stripe", {
+            configurable: true,
+
+            set() {
+                BotClientLogger.error("Failed to disable Stripe. Falling back to deleting window.Stripe");
+
+                Reflect.deleteProperty(window, "Stripe");
+            }
+        });
+        Object.defineProperty(window, "webpackChunkStripeJSouter", {
+            configurable: true,
+
+            set() {
+                BotClientLogger.error("Failed to disable webpackChunkStripeJSouter. Falling back to deleting window.webpackChunkStripeJSouter");
+
+                Reflect.deleteProperty(window, "webpackChunkStripeJSouter");
+            }
+        });
+        
         // Patch modules
         [
             "acceptFriendRequest",
