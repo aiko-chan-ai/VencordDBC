@@ -868,7 +868,7 @@ if (parseInt(window.sessionStorage.getItem('allShards')) > 1) {
                 {
                     match: /(\d):{fileSize:\w+}/g,
                     replace:
-                        "$1:{fileSize:(Date.now() > 1736985600000 ? 10485760 : 26214400)}",
+                        "$1:{fileSize:10485760}",
                 },
             ],
         },
